@@ -1,0 +1,289 @@
+[
+  {
+    "shortname": "biobricks-aopwiki",
+    "title": "BioBricks AOP-Wiki",
+    "description": "BioBricks AOP-Wiki is an open knowledge graph for Adverse Outcome Pathways from the AOP-Wiki.",
+    "homepage": "https://github.com/biobricks-ai/aopwikirdf-kg",
+    "named_graph": "https://purl.org/okn/frink/kg/biobricks-aopwiki"
+  },
+  {
+    "shortname": "biobricks-ice",
+    "title": "BioBricks ICE",
+    "description": "BioBricks ICE (Integrated Chemical Environment) is an open knowledge graph for cheminformatics and chemical safety data from EPA's CompTox database.",
+    "homepage": "https://github.com/biobricks-ai/biobricks-okg",
+    "named_graph": "https://purl.org/okn/frink/kg/biobricks-ice"
+  },
+  {
+    "shortname": "biobricks-mesh",
+    "title": "BioBricks MeSH",
+    "description": "BioBricks MeSH is an open knowledge graph of Medical Subject Headings (MeSH) biomedical vocabulary.",
+    "homepage": "https://github.com/biobricks-ai/mesh-kg",
+    "named_graph": "https://purl.org/okn/frink/kg/biobricks-mesh"
+  },
+  {
+    "shortname": "biobricks-pubchem-annotations",
+    "title": "BioBricks PubChem Annotations",
+    "description": "BioBricks PubChem Annotations is an open knowledge graph of chemical annotations from PubChem.",
+    "homepage": "https://github.com/biobricks-ai/pubchem-annotations-kg",
+    "named_graph": "https://purl.org/okn/frink/kg/biobricks-pubchem-annotations"
+  },
+  {
+    "shortname": "biobricks-tox21",
+    "title": "BioBricks Tox21",
+    "description": "BioBricks Tox21 is an open knowledge graph for Tox21 toxicology screening data.",
+    "homepage": "https://github.com/biobricks-ai/biobricks-okg",
+    "named_graph": "https://purl.org/okn/frink/kg/biobricks-tox21"
+  },
+  {
+    "shortname": "biobricks-toxcast",
+    "title": "BioBricks ToxCast",
+    "description": "BioBricks ToxCast is an open knowledge graph for EPA ToxCast high-throughput screening data.",
+    "homepage": "https://github.com/biobricks-ai/biobricks-okg",
+    "named_graph": "https://purl.org/okn/frink/kg/biobricks-toxcast"
+  },
+  {
+    "shortname": "biohealth",
+    "title": "Bio-Health KG",
+    "description": "Bio-Health KG is a dynamically-updated open knowledge network for health, integrating biomedical insights with social determinants of health.",
+    "homepage": null,
+    "named_graph": "https://purl.org/okn/frink/kg/biohealth"
+  },
+  {
+    "shortname": "biomarkerkg",
+    "title": "BiomarkerKB KG",
+    "description": "The BiomarkerKB knowledge graph is a structured network that connects biomarkers to diseases, drugs, biological entities, and evidence from the scientific literature.",
+    "homepage": "https://biomarkerkb.org/home/",
+    "named_graph": "https://purl.org/okn/frink/kg/biomarkerkg"
+  },
+  {
+    "shortname": "climatemodelskg",
+    "title": "Climate Models KG",
+    "description": "Climate Models KG is a knowledge graph to support evaluation and development of climate models.",
+    "homepage": null,
+    "named_graph": "https://purl.org/okn/frink/kg/climatemodelskg"
+  },
+  {
+    "shortname": "digcfdekg",
+    "title": "CFDE REVEAL Knowledge Graph",
+    "description": "The CFDE REVEAL Knowledge Graph is a statistically inferred genomic evidence graph to integrate and disseminate knowledge within the Common Fund Data Ecosystem (CFDE).",
+    "homepage": "https://cfdeknowledge.org/",
+    "named_graph": "https://purl.org/okn/frink/kg/digcfdekg"
+  },
+  {
+    "shortname": "dreamkg",
+    "title": "DREAM-KG",
+    "description": "Develop Dynamic, REsponsive, Adaptive, and Multifaceted Knowledge Graphs to Address Homelessness With Explainable AI",
+    "homepage": "https://dreamkg.com/",
+    "named_graph": "https://purl.org/okn/frink/kg/dreamkg"
+  },
+  {
+    "shortname": "evoweb",
+    "title": "EvoWeb",
+    "description": "EvoWeb - An Open Knowledge Graph of Co-evolving Genes (NIAID)",
+    "homepage": "https://data.niaid.nih.gov/",
+    "named_graph": "https://purl.org/okn/frink/kg/evoweb"
+  },
+  {
+    "shortname": "fiokg",
+    "title": "fiokg",
+    "description": "",
+    "homepage": null,
+    "named_graph": "https://purl.org/okn/frink/kg/fiokg"
+  },
+  {
+    "shortname": "gene-expression-atlas-okn",
+    "title": "Gene Expression Atlas",
+    "description": "Selected studies from the Gene Expression Atlas (https://www.ebi.ac.uk/gxa/home).",
+    "homepage": "https://www.ebi.ac.uk/gxa/home",
+    "named_graph": "https://purl.org/okn/frink/kg/gene-expression-atlas-okn"
+  },
+  {
+    "shortname": "geoconnex",
+    "title": "GEOCONNEX",
+    "description": "Geoconnex is an open, community-driven knowledge graph linking U.S. hydrologic features to enable seamless water data discovery, access, and collaborative monitoring.",
+    "homepage": "https://docs.geoconnex.us/about/intro",
+    "named_graph": "https://purl.org/okn/frink/kg/geoconnex"
+  },
+  {
+    "shortname": "hydrologykg",
+    "title": "SAWGraph Hydrology KG",
+    "description": "The Hydrology KG is the part of the SAWGraph project that describes streams, waterbodies and wells and their locations.",
+    "homepage": "https://sawgraph.github.io/",
+    "named_graph": "https://purl.org/okn/frink/kg/hydrologykg"
+  },
+  {
+    "shortname": "identifier-mappings",
+    "title": "ID Mappings",
+    "description": "Mappings using standard RDF predicates between Wikidata entities and external identifiers represented as RDF IRIs",
+    "homepage": "https://www.wikidata.org/",
+    "named_graph": "https://purl.org/okn/frink/kg/identifier-mappings"
+  },
+  {
+    "shortname": "maudekg",
+    "title": "FDA MAUDE Adverse Event Knowledge Graph",
+    "description": "Knowledge graph constructed from FDA MAUDE adverse event reports using standardized FDA product codes.",
+    "homepage": "https://github.com/Prabhadeus/Proto-OKN",
+    "named_graph": "https://purl.org/okn/frink/kg/maudekg"
+  },
+  {
+    "shortname": "nasa-gesdisc-kg",
+    "title": "NASA-GESDISC-KG",
+    "description": "The NASA Knowledge Graph Dataset is an expansive graph-based dataset designed to integrate and interconnect information about satellite datasets, scientific publications, instruments, platforms, projects, data centers, and science keywords. This knowledge graph is particularly focused on datasets managed by NASA's Distributed Active Archive Centers (DAACs), which are NASA's data repositories responsible for archiving and distributing scientific data. In addition to NASA DAACs, the graph includes datasets from 184 data providers worldwide, including various government agencies and academic institutions.",
+    "homepage": "https://disc.gsfc.nasa.gov",
+    "named_graph": "https://purl.org/okn/frink/kg/nasa-gesdisc-kg"
+  },
+  {
+    "shortname": "ncipidkg",
+    "title": "NCI-PID 2.0 KG",
+    "description": "The NCI-PID 2.0 Knowledge Graph converts NCI Pathway Interaction Database version 2.0 networks into RDF, capturing protein interactions, signaling pathways, and post-translational modifications enriched with INDRA evidence metadata.",
+    "homepage": "https://www.ndexbio.org/index.html#/networkset/7bc65b82-2a2f-11ed-ac45-0ac135e8bacf",
+    "named_graph": "https://purl.org/okn/frink/kg/ncipidkg"
+  },
+  {
+    "shortname": "nde",
+    "title": "NIAID Data Ecosystem KG",
+    "description": "The nde (NIAID Data Ecosystem) KG contains infectious and immune-mediated disease datasets. These include datasets from NIAID-funded repositories as well as globally-relevant infectious and immune-mediated disease (IID) repositories from NIH and beyond. The datasets include -omics data, clinical data, epidemiological data, pathogen-host interaction data, flow cytometry, and imaging.",
+    "homepage": "https://data.niaid.nih.gov/",
+    "named_graph": "https://purl.org/okn/frink/kg/nde"
+  },
+  {
+    "shortname": "nikg",
+    "title": "Neighborhood Information KG",
+    "description": "Neighborhood Information KG (NIKG) is a knowledge graph warehouse for neighborhood information.",
+    "homepage": null,
+    "named_graph": "https://purl.org/okn/frink/kg/nikg"
+  },
+  {
+    "shortname": "oard-kg",
+    "title": "Open Annotations for Rare Diseases (OARD) Knowledge Graph",
+    "description": "Clinical associations between rare diseases and phenotypes derived from electronic health records",
+    "homepage": "https://github.com/WengLab-InformaticsResearch/oard-react",
+    "named_graph": "https://purl.org/okn/frink/kg/oard-kg"
+  },
+  {
+    "shortname": "okn-void",
+    "title": "OKN VoID graph descriptions",
+    "description": "Collected VoID (Vocabulary of Interlinked Datasets) metadata for all OKN graphs",
+    "homepage": "https://registry.okn.us/registry/kgs/okn-void/",
+    "named_graph": "https://purl.org/okn/frink/kg/okn-void"
+  },
+  {
+    "shortname": "pankgraph",
+    "title": "PanKgraph",
+    "description": "PanKgraph — PanKbase Knowledge Graph (NIDDK)",
+    "homepage": "https://pankbase.org/",
+    "named_graph": "https://purl.org/okn/frink/kg/pankgraph"
+  },
+  {
+    "shortname": "phaseskg",
+    "title": "PHASES KG",
+    "description": "Knowledge graph Promoting Healthy Aging through Semantic Enrichment",
+    "homepage": "https://healthyphases.org/",
+    "named_graph": "https://purl.org/okn/frink/kg/phaseskg"
+  },
+  {
+    "shortname": "prokn",
+    "title": "Protein Knowledge Network",
+    "description": "The Protein Knowledge Network (ProKN) integrates protein-centric data with the genomic-centric datasets of the Common Fund Data Ecosystem (CFDE), spanning heterogeneous biological data types across multiple domains to foster CFDE re-use and collaboration through enhanced connectivity and data integration, enabling new capabilities for functional genomics and systems-level understanding of disease mechanisms.",
+    "homepage": "https://research.bioinformatics.udel.edu/ProKN/",
+    "named_graph": "https://purl.org/okn/frink/kg/prokn"
+  },
+  {
+    "shortname": "rdkg",
+    "title": "Rare Disease Knowledge Graph",
+    "description": "RDKG is an open knowledge graph for rare diseases that integrates standardized disease identifiers and cross-references to support discovery and evidence synthesis.",
+    "homepage": null,
+    "named_graph": "https://purl.org/okn/frink/kg/rdkg"
+  },
+  {
+    "shortname": "ruralkg",
+    "title": "Rural Resilience KG",
+    "description": "Rural Resilience KG is a cross-domain knowledge graph to integrate health and justice for rural resilience.",
+    "homepage": null,
+    "named_graph": "https://purl.org/okn/frink/kg/ruralkg"
+  },
+  {
+    "shortname": "sawgraph",
+    "title": "sawgraph",
+    "description": "",
+    "homepage": null,
+    "named_graph": "https://purl.org/okn/frink/kg/sawgraph"
+  },
+  {
+    "shortname": "scales",
+    "title": "SCALES",
+    "description": "SCALES is an integrated justice platform to connect criminal justice data across data silos.",
+    "homepage": "https://scales-okn.org/",
+    "named_graph": "https://purl.org/okn/frink/kg/scales"
+  },
+  {
+    "shortname": "securechainkg",
+    "title": "SecureChain KG",
+    "description": "SecureChain is a knowledge graph for resilient, trustworthy, and secure software supply chains.",
+    "homepage": "https://purdue-hcss.github.io/nsf-software-supply-chain_security/",
+    "named_graph": "https://purl.org/okn/frink/kg/securechainkg"
+  },
+  {
+    "shortname": "sockg",
+    "title": "SOC-KG",
+    "description": "The Soil Organic Carbon Knowledge Graph (SOCKG) enhances robust soil carbon modeling, which is crucial for voluntary carbon markets.",
+    "homepage": "https://idir.sockg.org/",
+    "named_graph": "https://purl.org/okn/frink/kg/sockg"
+  },
+  {
+    "shortname": "spatialkg",
+    "title": "SAWGraph Spatial KG",
+    "description": "The SAWGraph Spatial KG is part of the Safe Agricultural Products and Water Graph (SAWGraph) project. It contains all the Level 13 grid cells from the S2 grid as well as administrative regions of levels 1 to 3 (states, counties, and county subdivisions) and the spatial relationships between them for the 48 contiguous states in the U.S.",
+    "homepage": "https://sawgraph.github.io/",
+    "named_graph": "https://purl.org/okn/frink/kg/spatialkg"
+  },
+  {
+    "shortname": "spoke-genelab",
+    "title": "SPOKE GeneLab",
+    "description": "The spoke-genelab KG complements the spokeokn (SPOKE Open Knowledge Network) KG and is designed to integrate omics data from NASA’s Open Science Data Repository (OSDR/GeneLab), which hosts results from spaceflight experiments.",
+    "homepage": "https://github.com/BaranziniLab/spoke_genelab",
+    "named_graph": "https://purl.org/okn/frink/kg/spoke-genelab"
+  },
+  {
+    "shortname": "spoke-okn",
+    "title": "SPOKE-OKN",
+    "description": "The spoke-okn (SPOKE Open Knowledge Network) KG is a comprehensive biomedical and environmental health knowledge graph that integrates diverse data across genomics, environmental science, and public health.",
+    "homepage": "https://spoke.ucsf.edu",
+    "named_graph": "https://purl.org/okn/frink/kg/spoke-okn"
+  },
+  {
+    "shortname": "sudokn",
+    "title": "SUDOKN",
+    "description": "Supply and Demand Open Knowledge Network is an interconnected network of publicly available manufacturing capability data focused on Small and Medium-Sized Manufacturers.",
+    "homepage": "https://projects.engineering.asu.edu/sudokn/",
+    "named_graph": "https://purl.org/okn/frink/kg/sudokn"
+  },
+  {
+    "shortname": "ubergraph",
+    "title": "Ubergraph",
+    "description": "Integrated suite of OBO ontologies with precomputed inferred relationships",
+    "homepage": "https://github.com/INCATools/ubergraph/",
+    "named_graph": "https://purl.org/okn/frink/kg/ubergraph"
+  },
+  {
+    "shortname": "ufokn",
+    "title": "UF-OKN",
+    "description": "The Urban Flooding Open Knowledge Network (UF-OKN) is an informational infrastructure built using knowledge graphs aiming to extract structured content from the information scattered across open-source geospatial datasets and hydrologic models.",
+    "homepage": "https://ufokn.com",
+    "named_graph": "https://purl.org/okn/frink/kg/ufokn"
+  },
+  {
+    "shortname": "wikidata",
+    "title": "Wikidata",
+    "description": "Wikidata is a free and open knowledge base that can be read and edited by both humans and machines",
+    "homepage": "https://www.wikidata.org/",
+    "named_graph": "https://purl.org/okn/frink/kg/wikidata"
+  },
+  {
+    "shortname": "wildlifekn",
+    "title": "Wildlife-KN",
+    "description": "This project seeks to create a comprehensive, integrative knowledge network for the management of wildlife in the context of climate change",
+    "homepage": "https://sites.nd.edu/kn-wildlife/",
+    "named_graph": "https://purl.org/okn/frink/kg/wildlifekn"
+  }
+]

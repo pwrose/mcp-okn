@@ -1,0 +1,443 @@
+"""FastMCP server exposing the FRINK federated SPARQL endpoint.
+
+All queries go to the single federation endpoint
+(https://frink.apps.renci.org/federation/sparql) and are scoped to named graphs
+of the form https://purl.org/okn/frink/kg/{shortname}. The per-KG endpoints in
+the registry are never used.
+"""
+
+from __future__ import annotations
+
+from datetime import date as _date
+from typing import Any
+
+from mcp.server.fastmcp import FastMCP
+
+from . import registry, session
+from .sparql import FEDERATION_ENDPOINT, SparqlError, named_graph, run_sparql
+
+INSTRUCTIONS = """\
+Query the FRINK federated SPARQL endpoint over the Proto-OKN knowledge graphs.
+
+Workflow:
+1. Call `list_kgs` to see the available knowledge graphs and their descriptions,
+   then choose which one(s) are relevant to the question.
+2. Optionally call `describe_kg` for richer prose context on a chosen KG.
+3. Call `sparql_query` with a SPARQL query that scopes each KG with
+   `GRAPH <https://purl.org/okn/frink/kg/{shortname}> { ... }`. A single query
+   may span multiple named graphs (that is the point of federation).
+
+TRANSCRIPTS: Substantive `sparql_query`/`expand_ontology_term` calls are logged
+automatically — but queries that error or return no rows are NOT logged, and you
+can pass `exploratory=True` to `sparql_query` to keep schema-probing or
+trial-and-error queries out of the record. Call `reset_query_log` at the START of
+an analysis to scope the log, and `create_chat_transcript` at the END to emit a
+reproducible markdown record (prompts, answers, and the verbatim queries +
+results that actually produced findings).
+
+ONTOLOGY EXPANSION (read this before answering "all X under category Y" questions):
+Whenever a question covers a CATEGORY of ontology terms — e.g. "all
+cardiovascular diseases", "any kind of asthma", "diseases that are subtypes of
+X", "chemicals in class Y" — you MUST expand the category using `ubergraph`'s
+PRECOMPUTED transitive closure with a property path, in ONE query:
+
+    ?descendant rdfs:subClassOf* <parent-term-IRI>   # category + all subtypes
+
+Ubergraph already materialises every inferred edge, so this returns the complete
+subtree in a single step. Use `*` (reflexive) to INCLUDE the category term
+itself — usually what you want for "all X" questions; use `+` if you want strict
+subtypes only and must exclude the term itself.
+
+Do NOT, under any circumstances:
+  - fetch the ontology tree level by level / walk children iteratively;
+  - retrieve the hierarchy "separately" and then filter in your head;
+  - enumerate subtypes by hand or guess them.
+
+PREFER a single FEDERATED query that expands the category in the `ubergraph`
+graph and joins the expanded terms against the target KG in the same query, e.g.
+"find all cardiovascular diseases (MONDO:0004995) mentioned in <kg>":
+
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT DISTINCT ?disease ?label WHERE {
+      GRAPH <https://purl.org/okn/frink/kg/ubergraph> {
+        ?disease rdfs:subClassOf* <http://purl.obolibrary.org/obo/MONDO_0004995> .
+        OPTIONAL { ?disease rdfs:label ?label }
+      }
+      GRAPH <https://purl.org/okn/frink/kg/SOME_TARGET_KG> {
+        ?record some:predicate ?disease .
+      }
+    }
+
+If you only need the list of terms in the category (no join), call
+`expand_ontology_term` instead of writing the query yourself.
+
+IMPORTANT: Only the federation endpoint is used. Do not attempt to use the
+per-KG SPARQL endpoints — they are not exposed and time out on complex queries.
+"""
+
+mcp = FastMCP("mcp-okn", instructions=INSTRUCTIONS)
+
+
+@mcp.tool()
+async def list_kgs() -> list[dict[str, Any]]:
+    """List all Proto-OKN knowledge graphs available on the FRINK federation.
+
+    Returns one entry per KG with its `shortname`, `title`, `description`,
+    `homepage`, and the `named_graph` URI to use inside
+    `GRAPH <...> { ... }` blocks. Use the descriptions to decide which graph(s)
+    to query.
+    """
+    return await registry.list_kgs()
+
+
+@mcp.tool()
+async def describe_kg(shortname: str) -> str:
+    """Return the full registry documentation for one KG.
+
+    Args:
+        shortname: The KG shortname (e.g. `prokn`, `sawgraph`, `ubergraph`),
+            as returned by `list_kgs`.
+
+    Returns the registry markdown (title, description, and prose) for deeper
+    context before writing a query.
+    """
+    return await registry.fetch_kg_doc(shortname)
+
+
+@mcp.tool()
+async def sparql_query(
+    query: str, format: str = "json", exploratory: bool = False
+) -> Any:
+    """Run a SPARQL query against the FRINK federation endpoint.
+
+    Scope each knowledge graph with its named graph, e.g.::
+
+        PREFIX up: <http://purl.uniprot.org/core/>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT DISTINCT ?mondo ?label WHERE {
+          GRAPH <https://purl.org/okn/frink/kg/prokn> {
+            ?d a up:Disease ; rdfs:seeAlso ?mondo .
+          }
+        }
+
+    For category/subtype questions ("all cardiovascular diseases", "any asthma",
+    "subtypes of X"), expand the category INLINE using ubergraph's precomputed
+    transitive closure and join it to the target KG in the SAME query — do not
+    walk the hierarchy level by level or fetch the tree separately::
+
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT DISTINCT ?disease ?label WHERE {
+          GRAPH <https://purl.org/okn/frink/kg/ubergraph> {
+            ?disease rdfs:subClassOf* <http://purl.obolibrary.org/obo/MONDO_0004995> .
+            OPTIONAL { ?disease rdfs:label ?label }
+          }
+          GRAPH <https://purl.org/okn/frink/kg/SOME_TARGET_KG> {
+            ?record some:predicate ?disease .
+          }
+        }
+
+    Args:
+        query: A complete SPARQL query string.
+        format: `json` (default; parsed into rows), `csv`, or `tsv` (raw text).
+        exploratory: Set True for schema-probing, sampling, or trial-and-error
+            queries you don't want in the transcript. Exploratory queries are
+            never logged. (Queries that error or return no rows are skipped
+            automatically, exploratory or not.)
+
+    Returns:
+        For json: `{"vars": [...], "rows": [...], "row_count": N}`.
+        For csv/tsv: `{"format": ..., "text": "..."}`.
+
+    Note: The endpoint runs on a read-only filesystem, so queries needing a
+    large external sort over a full-graph scan may fail; add a `LIMIT`, narrow
+    the pattern, or scope to a named graph.
+    """
+    try:
+        result = await run_sparql(query, fmt=format)
+        if not exploratory:
+            session.record(query, format, result=result)
+        return result
+    except SparqlError as exc:
+        return {"error": str(exc)}
+
+
+@mcp.tool()
+async def expand_ontology_term(
+    term: str,
+    relation: str = "subClassOf",
+    direction: str = "descendants",
+    include_self: bool = True,
+    limit: int = 1000,
+) -> Any:
+    """Expand an ontology term to its full subtree/closure via `ubergraph`.
+
+    USE THIS (or the equivalent inline `rdfs:subClassOf*` pattern) for any
+    "all X under category Y" / "subtypes of" / "descendants of" question, e.g.
+    "all cardiovascular diseases". Ubergraph stores precomputed inferred edges,
+    so this returns the COMPLETE subtree in one call. Do not walk the hierarchy
+    level by level or fetch the tree separately.
+
+    Args:
+        term: The ontology term as a full URI
+            (e.g. `http://purl.obolibrary.org/obo/MONDO_0003847`) or a CURIE
+            with an OBO prefix (e.g. `MONDO:0003847`, `CHEBI:24431`).
+        relation: `subClassOf` (default) or `partOf`.
+        direction: `descendants` (terms under `term`) or `ancestors`.
+        include_self: If True (default), include `term` itself in the results
+            (reflexive `*` path); if False, return only strict descendants/
+            ancestors (non-reflexive `+` path).
+        limit: Max rows to return.
+
+    Returns the matching terms with their `rdfs:label`.
+    """
+    term_uri = _to_uri(term)
+    rel = {
+        "subClassOf": "rdfs:subClassOf",
+        "partof": "<http://purl.obolibrary.org/obo/BFO_0000050>",
+        "partOf": "<http://purl.obolibrary.org/obo/BFO_0000050>",
+    }.get(relation, "rdfs:subClassOf")
+
+    # `*` is reflexive (includes `term`); `+` is strict (excludes it).
+    op = "*" if include_self else "+"
+    if direction == "ancestors":
+        pattern = f"<{term_uri}> {rel}{op} ?term ."
+    else:
+        pattern = f"?term {rel}{op} <{term_uri}> ."
+
+    graph = named_graph("ubergraph")
+    query = f"""\
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT DISTINCT ?term ?label WHERE {{
+  GRAPH <{graph}> {{
+    {pattern}
+    OPTIONAL {{ ?term rdfs:label ?label . }}
+  }}
+}} LIMIT {int(limit)}"""
+    try:
+        result = await run_sparql(query)
+        session.record(query, "json", result=result)
+        return result
+    except SparqlError as exc:
+        return {"error": str(exc), "query": query}
+
+
+@mcp.tool()
+async def reset_query_log() -> dict[str, Any]:
+    """Clear the session's SPARQL query log to start a fresh transcript scope.
+
+    Call this at the START of a new analysis. Every subsequent `sparql_query`
+    (and `expand_ontology_term`) call is logged automatically, and
+    `create_chat_transcript` renders that log as the ground-truth record of what
+    actually ran — so you don't have to re-supply queries from memory.
+    """
+    removed = session.reset()
+    return {"cleared": removed}
+
+
+@mcp.tool()
+async def get_query_log() -> list[dict[str, Any]]:
+    """Return the SPARQL queries logged so far this session, in execution order.
+
+    Only queries that returned rows and were not marked exploratory are present.
+    Each entry has `timestamp`, `sparql` (verbatim), `graphs` (KG shortnames),
+    `format`, `row_count`, and `results` (capped sample). Useful to inspect what
+    will appear in `create_chat_transcript`.
+    """
+    return session.entries()
+
+
+@mcp.tool()
+async def create_chat_transcript(
+    model: str,
+    exchanges: list[dict[str, Any]] | None = None,
+    kgs_used: list[str] | None = None,
+    date: str | None = None,
+    format: str = "markdown",
+    title: str = "Proto-OKN Chat Transcript",
+    include_query_log: bool = True,
+) -> Any:
+    """Build a reproducible, detailed transcript of a Proto-OKN session.
+
+    Captures the FULL working detail — not just a summary — so the session can
+    be reproduced and audited: the user prompts and your answers, every SPARQL
+    query that actually ran (verbatim) with the rows it returned, plus session
+    provenance (date, model version, knowledge graphs, endpoint).
+
+    Queries come from the automatic session log: each `sparql_query` /
+    `expand_ontology_term` call is recorded as it runs, and (when
+    `include_query_log` is true) rendered here as ground truth — you do NOT need
+    to re-supply them. Call `reset_query_log` at the start of an analysis to
+    scope the log to that session. You still supply the prompts and your
+    narrative answers via `exchanges`.
+
+    Args:
+        model: The model version that produced the analysis
+            (e.g. `claude-opus-4-8`). Use the exact model ID.
+        exchanges: The conversation turns, in order. Each is a dict with
+            `prompt` (str) and optional `answer` (str). You may also attach an
+            explicit `queries` list per turn (same shape as the log entries) if
+            you want queries shown inline with a specific prompt instead of —
+            or in addition to — the auto-logged appendix.
+        kgs_used: Shortnames of the knowledge graphs queried. If omitted, they
+            are inferred from the logged queries. Each is expanded to its
+            federation named-graph URI.
+        date: ISO date (`YYYY-MM-DD`) of the session. Defaults to today.
+        format: `markdown` (default) for a rendered document string, or `json`
+            for the structured fields.
+        title: Heading for the transcript.
+        include_query_log: If true (default), append the auto-logged queries
+            (with results) as a "SPARQL queries executed" section.
+
+    Returns:
+        For `markdown`: the transcript string, with each query in a fenced
+        ```sparql block followed by its results as a table/code block.
+        For `json`: a dict with `title`, `date`, `model`, `exchanges`,
+        `knowledge_graphs`, `query_log`, and `sparql_endpoint`.
+    """
+    when = date or _date.today().isoformat()
+    exchanges = exchanges or []
+    log = session.entries() if include_query_log else []
+
+    # Infer KGs from the log when the caller doesn't pass them explicitly.
+    if kgs_used is None:
+        names: list[str] = []
+        for entry in log:
+            for name in entry.get("graphs", []):
+                if name not in names:
+                    names.append(name)
+        kgs_used = names
+    kgs = [
+        {"shortname": name, "named_graph": named_graph(name)}
+        for name in kgs_used
+    ]
+
+    if format == "json":
+        return {
+            "title": title,
+            "date": when,
+            "model": model,
+            "exchanges": exchanges,
+            "knowledge_graphs": kgs,
+            "query_log": log,
+            "sparql_endpoint": FEDERATION_ENDPOINT,
+        }
+
+    if format != "markdown":
+        return {"error": f"Unsupported format {format!r}; use 'markdown' or 'json'."}
+
+    lines = [
+        f"# {title}",
+        "",
+        f"- **Date:** {when}",
+        f"- **Model:** {model}",
+        f"- **SPARQL endpoint:** {FEDERATION_ENDPOINT}",
+        "",
+        "## Knowledge graphs used",
+        "",
+    ]
+    if kgs:
+        lines += [f"- `{kg['shortname']}` — <{kg['named_graph']}>" for kg in kgs]
+    else:
+        lines.append("- _None queried._")
+
+    lines += ["", "## Conversation", ""]
+    if not exchanges:
+        lines += ["_No prompts recorded._", ""]
+    for i, exchange in enumerate(exchanges, start=1):
+        lines += [f"### {i}. {exchange.get('prompt', '(no prompt)')}", ""]
+        for j, q in enumerate(exchange.get("queries") or [], start=1):
+            lines += _render_query(q, f"Query {j}")
+        answer = (exchange.get("answer") or "").strip()
+        if answer:
+            lines += ["**Answer:**", "", answer, ""]
+
+    if log:
+        lines += ["## SPARQL queries executed", ""]
+        for k, entry in enumerate(log, start=1):
+            ctx = entry.get("timestamp", "")
+            graphs = entry.get("graphs") or []
+            if graphs:
+                ctx += " · " + ", ".join(f"`{g}`" for g in graphs)
+            lines += _render_query(entry, f"Query {k}", subheading=ctx)
+
+    return "\n".join(lines)
+
+
+def _render_query(q: dict[str, Any], label: str, subheading: str = "") -> list[str]:
+    """Render one query (verbatim text + results or error) as markdown lines."""
+    desc = (q.get("description") or "").strip()
+    heading = f"#### {label}" + (f" — {desc}" if desc else "")
+    lines = [heading, ""]
+    if subheading:
+        lines += [f"_{subheading}_", ""]
+    lines += ["```sparql", (q.get("sparql") or "").strip(), "```", ""]
+    if q.get("error"):
+        lines += [f"**Error:** {q['error']}", ""]
+    else:
+        lines += _render_results(q.get("results"))
+    return lines
+
+
+def _render_results(results: Any) -> list[str]:
+    """Render a query's results as markdown lines (table, code block, or note)."""
+    if results is None:
+        return []
+    # SPARQL json shape from `sparql_query`: {"vars", "rows", "row_count"}.
+    if isinstance(results, dict) and "rows" in results:
+        rows = results.get("rows") or []
+        cols = results.get("vars") or (list(rows[0].keys()) if rows else [])
+        count = results.get("row_count", len(rows))
+        return [f"_{count} row(s)_", ""] + _rows_to_table(cols, rows)
+    # csv/tsv shape: {"format", "text"}.
+    if isinstance(results, dict) and "text" in results:
+        fmt = results.get("format", "")
+        return [f"```{fmt}".rstrip(), str(results["text"]).strip(), "```", ""]
+    # A bare list of row dicts.
+    if isinstance(results, list):
+        cols = list(results[0].keys()) if results and isinstance(results[0], dict) else []
+        return [f"_{len(results)} row(s)_", ""] + _rows_to_table(cols, results)
+    # Anything else: show as text.
+    return ["```", str(results).strip(), "```", ""]
+
+
+def _rows_to_table(cols: list[str], rows: list[dict[str, Any]]) -> list[str]:
+    """Render rows (list of {col: value}) as a GitHub-flavored markdown table."""
+    if not cols or not rows:
+        return ["_(no rows)_", ""]
+
+    def cell(value: Any) -> str:
+        return "" if value is None else str(value).replace("|", "\\|").replace("\n", " ")
+
+    out = [
+        "| " + " | ".join(cols) + " |",
+        "| " + " | ".join("---" for _ in cols) + " |",
+    ]
+    out += ["| " + " | ".join(cell(r.get(c)) for c in cols) + " |" for r in rows]
+    out.append("")
+    return out
+
+
+_OBO_PREFIXES = (
+    "MONDO", "CHEBI", "GO", "HP", "UBERON", "CL", "PR", "NCBITaxon",
+    "DOID", "SO", "PATO", "BFO", "ENVO", "FOODON", "OBI",
+)
+
+
+def _to_uri(term: str) -> str:
+    """Convert an OBO CURIE (PREFIX:1234567) to a full purl URI; pass URIs through."""
+    if term.startswith(("http://", "https://")):
+        return term
+    if ":" in term:
+        prefix, _, local = term.partition(":")
+        if prefix in _OBO_PREFIXES:
+            return f"http://purl.obolibrary.org/obo/{prefix}_{local}"
+    return term
+
+
+def main() -> None:
+    """Console entry point: run the server over stdio."""
+    mcp.run()
+
+
+if __name__ == "__main__":
+    main()

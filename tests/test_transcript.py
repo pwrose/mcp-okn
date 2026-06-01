@@ -1,0 +1,197 @@
+import pytest
+
+from mcp_okn import session
+from mcp_okn.server import create_chat_transcript, _rows_to_table
+from mcp_okn.sparql import FEDERATION_ENDPOINT
+
+
+@pytest.fixture(autouse=True)
+def clean_log():
+    """Each test starts and ends with an empty session log."""
+    session.reset()
+    yield
+    session.reset()
+
+
+JSON_RESULT = {
+    "vars": ["disease", "label"],
+    "rows": [
+        {"disease": "MONDO:0005240", "label": "kidney cancer"},
+        {"disease": "MONDO:0005089", "label": "testicular cancer"},
+    ],
+    "row_count": 2,
+}
+
+
+def test_session_records_query_and_detects_graphs():
+    logged = session.record(
+        "SELECT * WHERE { GRAPH <https://purl.org/okn/frink/kg/sawgraph> { ?s ?p ?o } }",
+        "json",
+        result=JSON_RESULT,
+    )
+    assert logged is True
+    [entry] = session.entries()
+    assert entry["graphs"] == ["sawgraph"]
+    assert entry["row_count"] == 2
+    assert entry["results"]["rows"][0]["label"] == "kidney cancer"
+
+
+def test_session_skips_errored_queries():
+    assert session.record("BAD QUERY", "json", error="boom") is False
+    assert session.entries() == []
+
+
+def test_session_skips_empty_json_results():
+    empty = {"vars": ["x"], "rows": [], "row_count": 0}
+    assert session.record("SELECT ?x {}", "json", result=empty) is False
+    assert session.entries() == []
+
+
+def test_session_skips_header_only_csv():
+    header_only = {"format": "csv", "text": "x\n"}
+    assert session.record("SELECT ?x {}", "csv", result=header_only) is False
+    csv_with_rows = {"format": "csv", "text": "x\n1\n2\n"}
+    assert session.record("SELECT ?x {}", "csv", result=csv_with_rows) is True
+    [entry] = session.entries()
+    assert entry["row_count"] == 2
+
+
+async def test_transcript_renders_logged_queries_as_ground_truth():
+    query = (
+        "SELECT ?disease ?label WHERE {\n"
+        "  GRAPH <https://purl.org/okn/frink/kg/sawgraph> { ?x :linkedTo ?disease }\n"
+        "}"
+    )
+    session.record(query, "json", result=JSON_RESULT)
+
+    md = await create_chat_transcript(
+        model="claude-opus-4-8",
+        exchanges=[
+            {
+                "prompt": "Which diseases relate to PFAS?",
+                "answer": "Two cancers are associated.",
+            }
+        ],
+        date="2026-05-31",
+    )
+    # provenance
+    assert "**Date:** 2026-05-31" in md
+    assert FEDERATION_ENDPOINT in md
+    # KGs inferred from the log, not supplied by the caller
+    assert "`sawgraph` — <https://purl.org/okn/frink/kg/sawgraph>" in md
+    # conversation
+    assert "### 1. Which diseases relate to PFAS?" in md
+    assert "**Answer:**" in md
+    # ground-truth query section with the verbatim query and a results table
+    assert "## SPARQL queries executed" in md
+    assert "GRAPH <https://purl.org/okn/frink/kg/sawgraph>" in md
+    assert "| disease | label |" in md
+    assert "| MONDO:0005240 | kidney cancer |" in md
+
+
+async def test_sparql_query_does_not_log_exploratory(monkeypatch):
+    import mcp_okn.server as srv
+
+    async def fake_run(query, fmt="json", **kw):
+        return {"vars": ["x"], "rows": [{"x": 1}], "row_count": 1}
+
+    monkeypatch.setattr(srv, "run_sparql", fake_run)
+    await srv.sparql_query("SELECT ?x {}", exploratory=True)
+    assert session.entries() == []
+    await srv.sparql_query("SELECT ?x {}")
+    assert len(session.entries()) == 1
+
+
+async def test_sparql_query_does_not_log_empty_result(monkeypatch):
+    import mcp_okn.server as srv
+
+    async def fake_run(query, fmt="json", **kw):
+        return {"vars": ["x"], "rows": [], "row_count": 0}
+
+    monkeypatch.setattr(srv, "run_sparql", fake_run)
+    await srv.sparql_query("SELECT ?x {}")
+    assert session.entries() == []
+
+
+async def test_include_query_log_false_omits_section():
+    session.record(
+        "SELECT * WHERE { GRAPH <https://purl.org/okn/frink/kg/prokn> {} }",
+        "json",
+        result={"vars": [], "rows": [], "row_count": 0},
+    )
+    md = await create_chat_transcript(
+        model="m",
+        exchanges=[{"prompt": "hi", "answer": "hello"}],
+        include_query_log=False,
+    )
+    assert "## SPARQL queries executed" not in md
+    assert "### 1. hi" in md
+
+
+async def test_explicit_kgs_override_inference():
+    session.record(
+        "SELECT * WHERE { GRAPH <https://purl.org/okn/frink/kg/sawgraph> {} }",
+        "json",
+        result={"vars": [], "rows": [], "row_count": 0},
+    )
+    md = await create_chat_transcript(model="m", kgs_used=["prokn"])
+    assert "`prokn` —" in md
+    assert "`sawgraph` —" not in md
+
+
+async def test_inline_queries_on_a_turn_still_render():
+    md = await create_chat_transcript(
+        model="m",
+        exchanges=[
+            {
+                "prompt": "q",
+                "queries": [
+                    {
+                        "sparql": "SELECT * {}",
+                        "description": "inline",
+                        "results": {"format": "csv", "text": "a,b\n1,2"},
+                    }
+                ],
+            }
+        ],
+    )
+    assert "#### Query 1 — inline" in md
+    assert "```csv\na,b\n1,2\n```" in md
+
+
+async def test_date_defaults_to_today():
+    from datetime import date
+
+    md = await create_chat_transcript(model="m")
+    assert f"**Date:** {date.today().isoformat()}" in md
+
+
+async def test_no_queries_renders_placeholder():
+    md = await create_chat_transcript(model="m")
+    assert "_None queried._" in md
+    assert "_No prompts recorded._" in md
+
+
+async def test_json_format_includes_log():
+    session.record(
+        "SELECT ?s WHERE { GRAPH <https://purl.org/okn/frink/kg/prokn> { ?s ?p ?o } }",
+        "json",
+        result={"vars": ["s"], "rows": [{"s": "urn:x"}], "row_count": 1},
+    )
+    out = await create_chat_transcript(model="claude-opus-4-8", date="2026-05-31", format="json")
+    assert out["model"] == "claude-opus-4-8"
+    assert out["sparql_endpoint"] == FEDERATION_ENDPOINT
+    assert len(out["query_log"]) == 1
+    assert out["knowledge_graphs"] == [
+        {"shortname": "prokn", "named_graph": "https://purl.org/okn/frink/kg/prokn"}
+    ]
+
+
+async def test_unsupported_format_returns_error():
+    out = await create_chat_transcript(model="m", format="pdf")
+    assert "error" in out
+
+
+def test_rows_to_table_escapes_pipes():
+    table = _rows_to_table(["c"], [{"c": "a|b"}])
+    assert "| a\\|b |" in table

@@ -255,6 +255,7 @@ async def create_chat_transcript(
     format: str = "markdown",
     title: str = "Proto-OKN Chat Transcript",
     include_query_log: bool = True,
+    include_intermediate_rows: bool = False,
 ) -> Any:
     """Build a reproducible, detailed transcript of a Proto-OKN session.
 
@@ -286,7 +287,14 @@ async def create_chat_transcript(
             for the structured fields.
         title: Heading for the transcript.
         include_query_log: If true (default), append the auto-logged queries
-            (with results) as a "SPARQL queries executed" section.
+            as a "SPARQL queries executed" section.
+        include_intermediate_rows: If false (default), only the FINAL logged
+            query renders its result rows; earlier (intermediate) queries show
+            their SPARQL and row count but omit the result table, to keep the
+            transcript focused on the queries that produced the findings. Set
+            true to render the full result rows for every logged query.
+            (Queries attached inline to an exchange via `queries` always render
+            in full, regardless of this flag.)
 
     Returns:
         For `markdown`: the transcript string, with each query in a fenced
@@ -358,13 +366,27 @@ async def create_chat_transcript(
             graphs = entry.get("graphs") or []
             if graphs:
                 ctx += " · " + ", ".join(f"`{g}`" for g in graphs)
-            lines += _render_query(entry, f"Query {k}", subheading=ctx)
+            # By default only the final query's rows are shown; intermediate
+            # queries list their text and row count but omit the result table.
+            show_results = include_intermediate_rows or k == len(log)
+            lines += _render_query(
+                entry, f"Query {k}", subheading=ctx, show_results=show_results
+            )
 
     return "\n".join(lines)
 
 
-def _render_query(q: dict[str, Any], label: str, subheading: str = "") -> list[str]:
-    """Render one query (verbatim text + results or error) as markdown lines."""
+def _render_query(
+    q: dict[str, Any],
+    label: str,
+    subheading: str = "",
+    show_results: bool = True,
+) -> list[str]:
+    """Render one query (verbatim text + results or error) as markdown lines.
+
+    When ``show_results`` is False, the result rows are omitted and replaced by a
+    one-line row-count note — used for intermediate queries in the log appendix.
+    """
     desc = (q.get("description") or "").strip()
     heading = f"#### {label}" + (f" — {desc}" if desc else "")
     lines = [heading, ""]
@@ -373,8 +395,16 @@ def _render_query(q: dict[str, Any], label: str, subheading: str = "") -> list[s
     lines += ["```sparql", (q.get("sparql") or "").strip(), "```", ""]
     if q.get("error"):
         lines += [f"**Error:** {q['error']}", ""]
-    else:
+    elif show_results:
         lines += _render_results(q.get("results"))
+    else:
+        count = q.get("row_count")
+        note = (
+            f"{count} row(s) — results omitted"
+            if count is not None
+            else "results omitted"
+        )
+        lines += [f"_{note}_", ""]
     return lines
 
 

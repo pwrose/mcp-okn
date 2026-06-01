@@ -159,6 +159,55 @@ async def test_inline_queries_on_a_turn_still_render():
     assert "```csv\na,b\n1,2\n```" in md
 
 
+async def test_intermediate_query_rows_omitted_by_default():
+    intermediate = {
+        "vars": ["x"],
+        "rows": [{"x": "step-1-value"}],
+        "row_count": 1,
+    }
+    session.record(
+        "SELECT ?x WHERE { GRAPH <https://purl.org/okn/frink/kg/prokn> { ?x ?p ?o } }",
+        "json",
+        result=intermediate,
+    )
+    session.record(
+        "SELECT ?disease ?label WHERE { GRAPH <https://purl.org/okn/frink/kg/sawgraph> { ?x :linkedTo ?disease } }",
+        "json",
+        result=JSON_RESULT,
+    )
+
+    md = await create_chat_transcript(model="m")
+    # Intermediate (first) query: text shown, rows omitted with a count note.
+    assert "_1 row(s) — results omitted_" in md
+    assert "step-1-value" not in md
+    # Final query: full result table rendered.
+    assert "| disease | label |" in md
+    assert "| MONDO:0005240 | kidney cancer |" in md
+
+
+async def test_include_intermediate_rows_true_renders_all():
+    intermediate = {
+        "vars": ["x"],
+        "rows": [{"x": "step-1-value"}],
+        "row_count": 1,
+    }
+    session.record(
+        "SELECT ?x WHERE { GRAPH <https://purl.org/okn/frink/kg/prokn> { ?x ?p ?o } }",
+        "json",
+        result=intermediate,
+    )
+    session.record(
+        "SELECT ?disease ?label WHERE { GRAPH <https://purl.org/okn/frink/kg/sawgraph> { ?x :linkedTo ?disease } }",
+        "json",
+        result=JSON_RESULT,
+    )
+
+    md = await create_chat_transcript(model="m", include_intermediate_rows=True)
+    assert "results omitted" not in md
+    assert "step-1-value" in md
+    assert "| MONDO:0005240 | kidney cancer |" in md
+
+
 async def test_date_defaults_to_today():
     from datetime import date
 

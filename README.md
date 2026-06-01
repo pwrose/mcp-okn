@@ -17,10 +17,13 @@ SPARQL queries scoped to one or more named graphs of the form
 
 | Tool | Purpose |
 | --- | --- |
-| `list_kgs` | List all KGs with `shortname`, `title`, `description`, and `named_graph`. Served from a bundled snapshot for instant cold start. |
-| `describe_kg(shortname)` | Full registry doc for one KG, for deeper context. |
-| `sparql_query(query, format="json")` | Run a SPARQL query on the federation endpoint. |
-| `expand_ontology_term(term, relation, direction)` | Expand an ontology term via the `ubergraph` graph. |
+| `list_kgs` | List all KGs with `shortname`, `title`, `description`, `homepage`, and `named_graph`. Served from a bundled snapshot for instant cold start. |
+| `describe_kg(shortname)` | Full registry doc (frontmatter + prose) for one KG, for deeper context. |
+| `sparql_query(query, format="json", exploratory=False)` | Run a SPARQL query on the federation endpoint. Substantive results are logged for the transcript unless `exploratory=True`. |
+| `expand_ontology_term(term, relation="subClassOf", direction="descendants", include_self=True, limit=1000)` | Expand an ontology term to its full subtree/closure via the `ubergraph` graph. |
+| `reset_query_log()` | Clear the session query log. Call at the **start** of an analysis to scope a transcript. |
+| `get_query_log()` | Return the queries logged so far this session (only those that returned rows and weren't exploratory). |
+| `create_chat_transcript(model, exchanges, ...)` | Emit a reproducible markdown (or JSON) record of a session — prompts, answers, and the verbatim queries + results that produced findings. Call at the **end** of an analysis. |
 
 ## Setup
 
@@ -32,7 +35,7 @@ uv run mcp-okn   # starts the server on stdio
 ## Register with Claude Code
 
 ```bash
-claude mcp add mcp-okn -- uv --directory /Users/peter/work/claude_ex1 run mcp-okn
+claude mcp add mcp-okn -- uv --directory /path/to/mcp-okn run mcp-okn
 ```
 
 Or add to your MCP client config (e.g. Claude Desktop `claude_desktop_config.json`):
@@ -42,11 +45,13 @@ Or add to your MCP client config (e.g. Claude Desktop `claude_desktop_config.jso
   "mcpServers": {
     "mcp-okn": {
       "command": "uv",
-      "args": ["--directory", "/Users/peter/work/claude_ex1", "run", "mcp-okn"]
+      "args": ["--directory", "/path/to/mcp-okn", "run", "mcp-okn"]
     }
   }
 }
 ```
+
+Replace `/path/to/mcp-okn` with the absolute path to your checkout.
 
 ## Example query
 
@@ -71,10 +76,26 @@ GRAPH <https://purl.org/okn/frink/kg/ubergraph> {
 }
 ```
 
+## Reproducible transcripts
+
+Every `sparql_query` / `expand_ontology_term` call that returns rows is logged
+in-memory for the lifetime of the server process, so a session can be replayed
+and audited without the model re-supplying queries from memory.
+
+- Queries that **error** or return **no rows** are never logged.
+- Pass `exploratory=True` to `sparql_query` to keep schema-probing or
+  trial-and-error queries out of the log.
+- Call `reset_query_log` at the **start** of an analysis to scope the log.
+- Call `create_chat_transcript` at the **end** to render a markdown (or JSON)
+  document: session provenance (date, model, endpoint), the knowledge graphs
+  used, the conversation (prompts + your answers), and every logged query
+  verbatim with the rows it returned. Up to `MAX_LOGGED_ROWS` (1000) rows are
+  stored per query; the true row count is always preserved.
+
 ## Development
 
 ```bash
-uv run pytest                 # unit tests (offline)
+uv run python -m pytest       # unit tests (offline)
 # live smoke test:
 uv run python -c "import asyncio; from mcp_okn.sparql import run_sparql; \
 print(asyncio.run(run_sparql('SELECT ?s WHERE { ?s ?p ?o } LIMIT 3')))"
@@ -82,14 +103,19 @@ print(asyncio.run(run_sparql('SELECT ?s WHERE { ?s ?p ?o } LIMIT 3')))"
 
 ## KG snapshot
 
-`list_kgs` serves a static snapshot bundled at `src/mcp_okn/data/kgs.json`, so
-the first call returns instantly without fetching ~42 registry files. The live
-registry is only contacted when the snapshot is missing. To refresh the snapshot
-after the registry changes:
+`list_kgs` serves a static snapshot bundled at `src/mcp_okn/data/kgs.json` (~41
+KGs), so the first call returns instantly without fetching the individual
+registry files. The live registry is only contacted when the snapshot is missing
+(or when an internal `refresh=True` is passed). To refresh the snapshot after the
+registry changes:
 
 ```bash
 uv run python scripts/refresh_snapshot.py
 ```
+
+KGs that are in the registry but not actually loaded under their expected
+federation named graph (currently just `semopenalex`) are filtered out, so
+`list_kgs` only returns graphs that are queryable.
 
 ## Notes
 

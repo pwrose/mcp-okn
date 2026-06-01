@@ -10,6 +10,9 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.urls]
+Repository = "https://github.com/sbl-sdsc/mcp-okn"
+
 [project.scripts]
 mcp-okn = "mcp_okn.server:main"
 

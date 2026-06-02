@@ -24,7 +24,9 @@ Workflow:
    then choose which one(s) are relevant to the question.
 2. Optionally call `describe_kg` for richer prose context on a chosen KG.
 3. Call `get_schema` for each chosen KG to learn its classes, predicates, and
-   property names BEFORE writing SPARQL — each KG has its own schema.
+   property names BEFORE writing SPARQL — each KG has its own schema. This also
+   reveals which IDENTIFIER SCHEME / ontology the KG actually stores (e.g. DOID
+   vs MONDO, NCBI Gene vs Ensembl vs symbol). Do not assume — probe first.
 4. Call `sparql_query` with a SPARQL query that scopes each KG with
    `GRAPH <https://purl.org/okn/frink/kg/{shortname}> { ... }`. A single query
    may span multiple named graphs (that is the point of federation).
@@ -72,6 +74,17 @@ graph and joins the expanded terms against the target KG in the same query, e.g.
 
 If you only need the list of terms in the category (no join), call
 `expand_ontology_term` instead of writing the query yourself.
+
+CHOOSE THE RIGHT ONTOLOGY (do this before picking a parent-term IRI):
+A KG may reference the same domain through more than one ontology — e.g. disease
+via BOTH DOID and MONDO, or genes via NCBI Gene, Ensembl, AND symbol. Do NOT
+assume which one a KG uses or default to the first that comes to mind: call
+`get_schema(target_kg)` and/or run a small `exploratory=True` `sparql_query` that
+samples the actual predicate/object IRIs in that graph, and confirm which
+ontology is actually stored. If several are present, pick the one with the right
+coverage for the question. Anchor the `subClassOf*` expansion on a term IRI from
+the ontology the KG ACTUALLY uses — expanding MONDO when the KG only links DOID
+(or vice versa) silently returns no rows.
 
 IMPORTANT: Only the federation endpoint is used. Do not attempt to use the
 per-KG SPARQL endpoints — they are not exposed and time out on complex queries.

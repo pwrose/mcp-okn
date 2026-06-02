@@ -22,6 +22,7 @@ MAX_LOGGED_ROWS = 1000
 _GRAPH_RE = re.compile(r"GRAPH\s*<https://purl\.org/okn/frink/kg/([^>]+)>")
 
 _log: list[dict[str, Any]] = []
+_visualizations: list[dict[str, Any]] = []
 
 
 def graphs_in(query: str) -> list[str]:
@@ -101,8 +102,39 @@ def entries() -> list[dict[str, Any]]:
     return list(_log)
 
 
+def record_visualization(shortname: str, mermaid: str) -> None:
+    """Record a schema visualization (Mermaid diagram) for the transcript.
+
+    Like queries, diagrams are logged automatically as they are produced so
+    `create_chat_transcript` can render them without the model re-supplying the
+    diagram. Re-visualizing the same KG replaces its earlier diagram (keeping
+    the original position) so only the latest diagram per KG is kept.
+    """
+    if not mermaid:
+        return
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "shortname": shortname,
+        "mermaid": mermaid,
+    }
+    for i, existing in enumerate(_visualizations):
+        if existing.get("shortname") == shortname:
+            _visualizations[i] = entry
+            return
+    _visualizations.append(entry)
+
+
+def visualizations() -> list[dict[str, Any]]:
+    """Return a shallow copy of the logged schema visualizations, in order."""
+    return list(_visualizations)
+
+
 def reset() -> int:
-    """Clear the session log. Returns the number of entries removed."""
+    """Clear the session log (queries and visualizations).
+
+    Returns the number of logged queries removed.
+    """
     n = len(_log)
     _log.clear()
+    _visualizations.clear()
     return n

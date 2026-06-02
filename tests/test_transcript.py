@@ -244,3 +244,50 @@ async def test_unsupported_format_returns_error():
 def test_rows_to_table_escapes_pipes():
     table = _rows_to_table(["c"], [{"c": "a|b"}])
     assert "| a\\|b |" in table
+
+
+def test_session_records_and_dedupes_visualizations():
+    session.record_visualization("dreamkg", "classDiagram\n  class A")
+    session.record_visualization("spoke-genelab", "classDiagram\n  class B")
+    # Re-visualizing the same KG replaces its diagram, keeping position + count.
+    session.record_visualization("dreamkg", "classDiagram\n  class A2")
+    viz = session.visualizations()
+    assert [v["shortname"] for v in viz] == ["dreamkg", "spoke-genelab"]
+    assert viz[0]["mermaid"].endswith("class A2")
+    assert session.record_visualization("x", "") is None and len(session.visualizations()) == 2
+
+
+async def test_transcript_renders_logged_visualization():
+    session.record_visualization("spoke-genelab", "classDiagram\n  class Gene")
+    md = await create_chat_transcript(model="m")
+    assert "## Schema visualizations" in md
+    assert "### `spoke-genelab` schema" in md
+    assert "```mermaid" in md
+    assert "classDiagram" in md
+    # The diagram's KG is inferred into the knowledge-graphs section.
+    assert "`spoke-genelab`" in md
+
+
+async def test_visualization_kg_inference_and_json():
+    session.record_visualization("dreamkg", "classDiagram\n  class Place")
+    out = await create_chat_transcript(model="m", format="json")
+    assert len(out["visualizations"]) == 1
+    assert out["visualizations"][0]["shortname"] == "dreamkg"
+    assert out["knowledge_graphs"] == [
+        {"shortname": "dreamkg", "named_graph": "https://purl.org/okn/frink/kg/dreamkg"}
+    ]
+
+
+async def test_include_visualizations_false_omits_section():
+    session.record_visualization("dreamkg", "classDiagram\n  class Place")
+    md = await create_chat_transcript(model="m", include_visualizations=False)
+    assert "## Schema visualizations" not in md
+
+
+async def test_inline_mermaid_on_a_turn_renders():
+    md = await create_chat_transcript(
+        model="m",
+        exchanges=[{"prompt": "show schema", "mermaid": "classDiagram\n  class Foo"}],
+    )
+    assert "```mermaid" in md
+    assert "class Foo" in md

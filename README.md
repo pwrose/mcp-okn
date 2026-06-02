@@ -25,7 +25,7 @@ SPARQL queries scoped to one or more named graphs of the form
 | `expand_ontology_term(term, relation="subClassOf", direction="descendants", include_self=True, limit=1000)` | Expand an ontology term to its full subtree/closure via the `ubergraph` graph. |
 | `reset_query_log()` | Clear the session query log. Call at the **start** of an analysis to scope a transcript. |
 | `get_query_log()` | Return the queries logged so far this session (only those that returned rows and weren't exploratory). |
-| `create_chat_transcript(model, exchanges, ...)` | Emit a reproducible markdown (or JSON) record of a session — prompts, answers, and the verbatim queries + results that produced findings. Call at the **end** of an analysis. |
+| `create_chat_transcript(model, exchanges, ...)` | Emit a reproducible markdown (or JSON) record of a session — prompts, answers, the verbatim queries + results that produced findings, and any `visualize_schema` diagrams. Call at the **end** of an analysis. |
 
 ## Setup
 
@@ -160,6 +160,11 @@ and audited without the model re-supplying queries from memory.
   keep the transcript focused on the queries that produced the findings. Pass
   `include_intermediate_rows=True` to render full results for every query.
   (Queries attached inline to an exchange via `queries` always render in full.)
+- `visualize_schema` diagrams are logged too, and rendered in a **Schema
+  visualizations** section (each in a ` ```mermaid ` block) — so a "visualize
+  schema" turn shows up in the transcript without re-supplying the diagram. Pass
+  `include_visualizations=False` to omit them, or attach a `mermaid` field to an
+  exchange to place a diagram inline with that turn.
 
 ## Development
 

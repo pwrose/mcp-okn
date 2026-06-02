@@ -175,8 +175,14 @@ async def visualize_schema(shortname: str) -> dict[str, Any]:
         `{"shortname": ..., "mermaid": "classDiagram ..."}`. Present the diagram
         inline by wrapping it in a ```mermaid fenced code block. The string has
         no fences, so it can also be saved directly as a `.mermaid` file.
+
+    The diagram is logged to the session automatically (like queries), so
+    `create_chat_transcript` renders it without you re-supplying it.
     """
-    return await schema.visualize_schema(shortname)
+    result = await schema.visualize_schema(shortname)
+    if "mermaid" in result:
+        session.record_visualization(shortname, result["mermaid"])
+    return result
 
 
 @mcp.tool()
@@ -301,12 +307,13 @@ SELECT DISTINCT ?term ?label WHERE {{
 
 @mcp.tool()
 async def reset_query_log() -> dict[str, Any]:
-    """Clear the session's SPARQL query log to start a fresh transcript scope.
+    """Clear the session's query log (and logged diagrams) for a fresh scope.
 
     Call this at the START of a new analysis. Every subsequent `sparql_query`
-    (and `expand_ontology_term`) call is logged automatically, and
-    `create_chat_transcript` renders that log as the ground-truth record of what
-    actually ran — so you don't have to re-supply queries from memory.
+    (and `expand_ontology_term`) call is logged automatically, as is every
+    `visualize_schema` diagram, and `create_chat_transcript` renders them as the
+    ground-truth record of what actually ran — so you don't have to re-supply
+    queries or diagrams from memory.
     """
     removed = session.reset()
     return {"cleared": removed}
@@ -334,6 +341,7 @@ async def create_chat_transcript(
     title: str = "Proto-OKN Chat Transcript",
     include_query_log: bool = True,
     include_intermediate_rows: bool = False,
+    include_visualizations: bool = True,
 ) -> Any:
     """Build a reproducible, detailed transcript of a Proto-OKN session.
 
@@ -373,24 +381,35 @@ async def create_chat_transcript(
             true to render the full result rows for every logged query.
             (Queries attached inline to an exchange via `queries` always render
             in full, regardless of this flag.)
+        include_visualizations: If true (default), append a "Schema
+            visualizations" section with every `visualize_schema` diagram logged
+            this session, each in a fenced ```mermaid block. These are recorded
+            automatically — you do NOT need to re-supply them.
 
     Returns:
         For `markdown`: the transcript string, with each query in a fenced
-        ```sparql block followed by its results as a table/code block.
+        ```sparql block followed by its results as a table/code block, and each
+        schema diagram in a fenced ```mermaid block.
         For `json`: a dict with `title`, `date`, `model`, `exchanges`,
-        `knowledge_graphs`, `query_log`, and `sparql_endpoint`.
+        `knowledge_graphs`, `query_log`, `visualizations`, and
+        `sparql_endpoint`.
     """
     when = date or _date.today().isoformat()
     exchanges = exchanges or []
     log = session.entries() if include_query_log else []
+    visualizations = session.visualizations() if include_visualizations else []
 
-    # Infer KGs from the log when the caller doesn't pass them explicitly.
+    # Infer KGs from the log (and any diagrams) when not passed explicitly.
     if kgs_used is None:
         names: list[str] = []
         for entry in log:
             for name in entry.get("graphs", []):
                 if name not in names:
                     names.append(name)
+        for viz in visualizations:
+            name = viz.get("shortname")
+            if name and name not in names:
+                names.append(name)
         kgs_used = names
     kgs = [
         {"shortname": name, "named_graph": named_graph(name)}
@@ -405,6 +424,7 @@ async def create_chat_transcript(
             "exchanges": exchanges,
             "knowledge_graphs": kgs,
             "query_log": log,
+            "visualizations": visualizations,
             "sparql_endpoint": FEDERATION_ENDPOINT,
         }
 
@@ -436,6 +456,11 @@ async def create_chat_transcript(
         answer = (exchange.get("answer") or "").strip()
         if answer:
             lines += ["**Answer:**", "", answer, ""]
+        # Optional Mermaid diagram(s) attached inline to this turn.
+        inline = exchange.get("mermaid")
+        for diagram in [inline] if isinstance(inline, str) else (inline or []):
+            if (diagram or "").strip():
+                lines += ["```mermaid", diagram.strip(), "```", ""]
 
     if log:
         lines += ["## SPARQL queries executed", ""]
@@ -450,6 +475,16 @@ async def create_chat_transcript(
             lines += _render_query(
                 entry, f"Query {k}", subheading=ctx, show_results=show_results
             )
+
+    if visualizations:
+        lines += ["## Schema visualizations", ""]
+        for viz in visualizations:
+            shortname = viz.get("shortname", "")
+            ctx = viz.get("timestamp", "")
+            lines += [f"### `{shortname}` schema", ""]
+            if ctx:
+                lines += [f"_{ctx}_", ""]
+            lines += ["```mermaid", (viz.get("mermaid") or "").strip(), "```", ""]
 
     return "\n".join(lines)
 

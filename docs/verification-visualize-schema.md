@@ -71,7 +71,54 @@ zero syntax-error markers) as:
 
 ![Rendered rdkg schema diagram](rdkg-schema.png)
 
+## Result — transcript round-trip (end-to-end)
+
+Confirms a `visualize_schema` diagram survives into `create_chat_transcript` and
+still renders — i.e. the diagram is auto-logged to the session and embedded in
+the transcript markdown, not dropped.
+
+Steps:
+
+1. `visualize_schema("spoke-genelab")` — logs the diagram to the session.
+2. `create_chat_transcript(...)` — emits markdown with a **Schema
+   visualizations** section.
+3. Extract the ` ```mermaid ` block **from the transcript markdown** (not from
+   the tool output) and render it with `mermaid-cli`.
+
+Result: the transcript contained an 81-line mermaid block, which rendered
+cleanly (exit 0, zero syntax-error markers) — identical to the standalone
+spoke-genelab render above.
+
+![spoke-genelab schema rendered from the transcript](spoke-genelab-from-transcript.png)
+
 ## Reproduce
+
+```python
+import asyncio
+from mcp_okn import schema
+
+m = asyncio.run(schema.visualize_schema("spoke-genelab"))["mermaid"]
+open("spoke-genelab.mermaid", "w").write(m)  # then render with mermaid-cli (above)
+```
+
+End-to-end transcript round-trip:
+
+```python
+import asyncio, re
+from mcp_okn import server, session
+import mcp_okn.schema as sch
+
+async def main():
+    session.reset()
+    r = await sch.visualize_schema("spoke-genelab")
+    session.record_visualization("spoke-genelab", r["mermaid"])
+    md = await server.create_chat_transcript(model="claude-opus-4-8")
+    block = re.search(r"```mermaid\n(.*?)\n```", md, re.S).group(1)
+    open("from_transcript.mermaid", "w").write(block)  # render with mermaid-cli
+
+asyncio.run(main())
+```
+
 
 ```python
 import asyncio

@@ -44,9 +44,9 @@ trial-and-error queries out of the record. Call `reset_query_log` at the START o
 an analysis to scope the log, and `create_chat_transcript` at the END to emit a
 reproducible markdown record (prompts, answers, and the verbatim queries +
 results that actually produced findings). The transcript is a standalone
-DOCUMENT: SAVE it to a separate `.md` file with a descriptive name and
-share/link that file — do NOT paste the full transcript into the chat; reply
-only with a one-line confirmation naming the file.
+DOCUMENT: do NOT paste it into the chat — confirm it's ready in one line and
+OFFER the user the option to save it as a `.md` or `.pdf` file, exporting it
+only if they ask.
 
 ONTOLOGY EXPANSION (read this before answering "all X under category Y" questions):
 Whenever a question covers a CATEGORY of ontology terms — e.g. "all
@@ -413,11 +413,11 @@ async def create_chat_transcript(
         `sparql_endpoint`.
 
     OUTPUT HANDLING (required): the markdown is a standalone DOCUMENT, not a chat
-    reply. SAVE it to a separate `.md` file with a descriptive name (e.g.
-    `proto-okn-transcript-<topic>-YYYY-MM-DD.md`) and share/link that file. Do
-    NOT paste the full transcript into the conversation — in chat, give only a
-    one-line confirmation with the filename. If no file-writing tool is
-    available, say so and offer the markdown rather than dumping it inline.
+    reply. Do NOT paste the full transcript into the conversation. Instead, give
+    a one-line confirmation that it's ready and OFFER the user the option to save
+    it as a `.md` or `.pdf` file (e.g. `proto-okn-transcript-<topic>-YYYY-MM-DD`).
+    Save/export it only if the user asks, using whatever file-writing tool is
+    available; if none is, say so.
     """
     when = date or _date.today().isoformat()
     exchanges = exchanges or []

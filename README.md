@@ -165,8 +165,9 @@ and audited without the model re-supplying queries from memory.
   schema" turn shows up in the transcript without re-supplying the diagram. Pass
   `include_visualizations=False` to omit them, or attach a `mermaid` field to an
   exchange to place a diagram inline with that turn.
-- The transcript is a standalone **document** — the intended use is to **save it
-  to a separate `.md` file**, not to paste it back into the chat.
+- The transcript is a standalone **document** — rather than pasting it into the
+  chat, the model confirms it's ready and offers to save it as a **`.md` or
+  `.pdf`** file, exporting it only if the user asks.
 
 ## Development
 

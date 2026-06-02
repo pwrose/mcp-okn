@@ -97,10 +97,10 @@ SCHEMA.ORG URIs: `https://schema.org/...` in a query is rewritten to
 canonical `http://` form, and the two are distinct IRIs to the engine. You may
 write either scheme; both match.
 
-SCHEMA VISUALIZATION: `visualize_schema` returns a ready-made Mermaid diagram.
-Present its `mermaid` string VERBATIM in a single ```mermaid fenced code block
-and nothing else. Do NOT redraw it as SVG/PNG/HTML/an image/an artifact or a
-hand-built diagram — Mermaid clients render the fenced block natively, and
+SCHEMA VISUALIZATION: `visualize_schema` returns a ready-made Mermaid diagram,
+pre-wrapped in a fenced block as `mermaid_block`. Output that `mermaid_block`
+VERBATIM and nothing else. Do NOT redraw it as SVG/PNG/HTML/an image/an artifact
+or a hand-built diagram — Mermaid clients render the fenced block natively, and
 producing your own graphic yields a messy, incorrect picture.
 
 IMPORTANT: Only the federation endpoint is used. Do not attempt to use the
@@ -178,15 +178,16 @@ async def visualize_schema(shortname: str) -> dict[str, Any]:
             `list_kgs`.
 
     Returns:
-        `{"shortname": ..., "mermaid": "classDiagram ..."}`.
+        `{"shortname": ..., "mermaid": ..., "mermaid_block": ...}`.
+        `mermaid_block` is the diagram ALREADY wrapped in a ```mermaid fenced
+        code block; `mermaid` is the same diagram fence-free (for saving as a
+        `.mermaid` file).
 
-    PRESENTATION (required): present the returned `mermaid` string VERBATIM inside
-    a single ```mermaid fenced code block, and nothing else. Do NOT redraw,
-    re-render, or convert it — in particular do NOT emit SVG, PNG, HTML, an
-    image, an artifact, or a hand-built diagram. Mermaid clients render the
-    fenced block natively; producing your own graphic yields a messy, incorrect
-    picture. Copy the string as-is (it has no fences, so it can also be saved
-    directly as a `.mermaid` file).
+    PRESENTATION (required): output `mermaid_block` VERBATIM, and nothing else.
+    Do NOT redraw, re-render, or convert it — in particular do NOT emit SVG, PNG,
+    HTML, an image, an artifact, or a hand-built diagram. Mermaid clients render
+    the fenced block natively; producing your own graphic yields a messy,
+    incorrect picture.
 
     The diagram is logged to the session automatically (like queries), so
     `create_chat_transcript` renders it without you re-supplying it.
@@ -194,6 +195,8 @@ async def visualize_schema(shortname: str) -> dict[str, Any]:
     result = await schema.visualize_schema(shortname)
     if "mermaid" in result:
         session.record_visualization(shortname, result["mermaid"])
+        # Pre-fenced form so the model can echo it verbatim without redrawing.
+        result["mermaid_block"] = f"```mermaid\n{result['mermaid']}\n```"
     return result
 
 

@@ -284,6 +284,24 @@ async def test_include_visualizations_false_omits_section():
     assert "## Schema visualizations" not in md
 
 
+async def test_visualize_schema_returns_fenced_block_and_logs_raw(monkeypatch):
+    import mcp_okn.server as srv
+
+    async def fake_viz(shortname):
+        return {"shortname": shortname, "mermaid": "classDiagram\n  class Gene"}
+
+    monkeypatch.setattr(srv.schema, "visualize_schema", fake_viz)
+    out = await srv.visualize_schema("demo")
+    # Pre-fenced block for verbatim presentation; raw mermaid kept fence-free.
+    assert out["mermaid_block"] == "```mermaid\nclassDiagram\n  class Gene\n```"
+    assert not out["mermaid"].startswith("```")
+    # The session logs the RAW diagram, so the transcript fences it exactly once.
+    [viz] = session.visualizations()
+    assert viz["mermaid"] == "classDiagram\n  class Gene"
+    md = await create_chat_transcript(model="m")
+    assert md.count("```mermaid") == 1
+
+
 async def test_inline_mermaid_on_a_turn_renders():
     md = await create_chat_transcript(
         model="m",

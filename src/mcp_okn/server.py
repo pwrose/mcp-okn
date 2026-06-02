@@ -14,7 +14,13 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from . import registry, schema, session
-from .sparql import FEDERATION_ENDPOINT, SparqlError, named_graph, run_sparql
+from .sparql import (
+    FEDERATION_ENDPOINT,
+    SparqlError,
+    named_graph,
+    normalize_schema_org,
+    run_sparql,
+)
 
 INSTRUCTIONS = """\
 Query the FRINK federated SPARQL endpoint over the Proto-OKN knowledge graphs.
@@ -85,6 +91,11 @@ ontology is actually stored. If several are present, pick the one with the right
 coverage for the question. Anchor the `subClassOf*` expansion on a term IRI from
 the ontology the KG ACTUALLY uses — expanding MONDO when the KG only links DOID
 (or vice versa) silently returns no rows.
+
+SCHEMA.ORG URIs: `https://schema.org/...` in a query is rewritten to
+`http://schema.org/...` automatically before it runs — the KGs store the
+canonical `http://` form, and the two are distinct IRIs to the engine. You may
+write either scheme; both match.
 
 IMPORTANT: Only the federation endpoint is used. Do not attempt to use the
 per-KG SPARQL endpoints — they are not exposed and time out on complex queries.
@@ -193,6 +204,9 @@ async def sparql_query(
     large external sort over a full-graph scan may fail; add a `LIMIT`, narrow
     the pattern, or scope to a named graph.
     """
+    # Normalize up front so the logged/transcript query matches what executes
+    # (run_sparql normalizes again; the substitution is idempotent).
+    query = normalize_schema_org(query)
     try:
         result = await run_sparql(query, fmt=format)
         if not exploratory:

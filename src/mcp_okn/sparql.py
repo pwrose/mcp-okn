@@ -9,6 +9,7 @@ QLever-backed federation endpoint and scoped to named graphs.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import httpx
@@ -29,6 +30,19 @@ _ACCEPT = {
 def named_graph(shortname: str) -> str:
     """Return the federation named-graph URI for a KG shortname."""
     return GRAPH_URI.format(shortname=shortname)
+
+
+# schema.org's canonical RDF namespace is `http://schema.org/`, which is what the
+# Proto-OKN KGs store, but models routinely write the `https://` website form.
+# The two are distinct IRIs to a SPARQL engine, so an `https://schema.org/...`
+# term silently matches nothing. Normalize it to the `http://` form so queries
+# work regardless of which scheme the author used.
+_SCHEMA_ORG_HTTPS = re.compile(r"https://schema\.org/")
+
+
+def normalize_schema_org(query: str) -> str:
+    """Rewrite ``https://schema.org/`` → ``http://schema.org/`` in a query."""
+    return _SCHEMA_ORG_HTTPS.sub("http://schema.org/", query)
 
 
 class SparqlError(RuntimeError):
@@ -83,6 +97,7 @@ async def run_sparql(
     if fmt not in _ACCEPT:
         raise ValueError(f"Unsupported format {fmt!r}; use one of {sorted(_ACCEPT)}")
 
+    query = normalize_schema_org(query)
     headers = {"Accept": _ACCEPT[fmt]}
     data = {"query": query}
 

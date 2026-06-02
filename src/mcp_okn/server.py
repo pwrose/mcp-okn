@@ -43,7 +43,10 @@ can pass `exploratory=True` to `sparql_query` to keep schema-probing or
 trial-and-error queries out of the record. Call `reset_query_log` at the START of
 an analysis to scope the log, and `create_chat_transcript` at the END to emit a
 reproducible markdown record (prompts, answers, and the verbatim queries +
-results that actually produced findings).
+results that actually produced findings). The transcript is a standalone
+DOCUMENT: SAVE it to a separate `.md` file with a descriptive name and
+share/link that file — do NOT paste the full transcript into the chat; reply
+only with a one-line confirmation naming the file.
 
 ONTOLOGY EXPANSION (read this before answering "all X under category Y" questions):
 Whenever a question covers a CATEGORY of ontology terms — e.g. "all
@@ -408,6 +411,13 @@ async def create_chat_transcript(
         For `json`: a dict with `title`, `date`, `model`, `exchanges`,
         `knowledge_graphs`, `query_log`, `visualizations`, and
         `sparql_endpoint`.
+
+    OUTPUT HANDLING (required): the markdown is a standalone DOCUMENT, not a chat
+    reply. SAVE it to a separate `.md` file with a descriptive name (e.g.
+    `proto-okn-transcript-<topic>-YYYY-MM-DD.md`) and share/link that file. Do
+    NOT paste the full transcript into the conversation — in chat, give only a
+    one-line confirmation with the filename. If no file-writing tool is
+    available, say so and offer the markdown rather than dumping it inline.
     """
     when = date or _date.today().isoformat()
     exchanges = exchanges or []

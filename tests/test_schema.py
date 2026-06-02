@@ -133,6 +133,10 @@ def test_build_mermaid_diagram_edges_and_intermediary_classes():
     assert "float log2fc" in diagram
     assert "Sample --> MEASURED_EXPR" in diagram
     assert "MEASURED_EXPR --> Gene" in diagram
+    # The edge class is styled distinctly from node classes; node classes are not.
+    assert "style MEASURED_EXPR fill:" in diagram
+    assert "style Gene " not in diagram
+    assert "style Sample " not in diagram
 
 
 def test_build_mermaid_diagram_lists_undrawn_predicates():

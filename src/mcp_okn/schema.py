@@ -33,6 +33,12 @@ _SCHEMA_NS = "https://purl.org/okn/frink/kg/{shortname}/schema/"
 #: KGs too large to enumerate a schema for via brute-force SPARQL probing.
 _TOO_LARGE = {"ubergraph"}
 
+#: Mermaid `style` declaration applied to edge (relationship) classes so they
+#: read differently from node classes. The per-class `style` statement is the
+#: form that actually renders fills in `classDiagram` (a `classDef` + `:::`
+#: assignment parses but emits no fill in current Mermaid).
+_EDGE_CLASS_STYLE = "fill:#FFE0B2,stroke:#E65100,color:#000"
+
 # Process-lifetime cache of parsed entity metadata, keyed by shortname.
 _metadata_cache: dict[str, dict[str, dict[str, str]]] = {}
 
@@ -428,6 +434,7 @@ def build_mermaid_diagram(shortname: str, schema: dict[str, Any]) -> str:
     declared: dict[str, list[str]] = {}  # class id -> member lines (insertion order)
     relationships: list[str] = []
     undrawn: list[str] = []
+    edge_class_ids: list[str] = []  # intermediary classes (styled distinctly)
 
     def ensure_class(label: str) -> str:
         cid = _mermaid_id(label)
@@ -471,6 +478,8 @@ def build_mermaid_diagram(shortname: str, schema: dict[str, Any]) -> str:
             if member and member not in members:
                 members.append(member)
         declared[edge_id] = members
+        if edge_id not in edge_class_ids:
+            edge_class_ids.append(edge_id)
         src, tgt = info.get("source_class", ""), info.get("target_class", "")
         if src:
             relationships.append(f"  {ensure_class(src)} --> {edge_id}")
@@ -512,6 +521,9 @@ def build_mermaid_diagram(shortname: str, schema: dict[str, Any]) -> str:
         else:
             lines.append(f"  class {cid}")
     lines += relationships
+    if edge_class_ids:
+        lines.append("  %% Edge (relationship) classes — styled to stand out:")
+        lines += [f"  style {cid} {_EDGE_CLASS_STYLE}" for cid in edge_class_ids]
     if undrawn:
         lines.append("  %% Predicates without source/target metadata (not drawn):")
         lines += [f"  %%   - {p}" for p in undrawn]

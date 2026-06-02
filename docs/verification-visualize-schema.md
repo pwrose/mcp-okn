@@ -13,6 +13,8 @@ real Mermaid engine via `@mermaid-js/mermaid-cli` (headless Chromium):
   edge predicates with properties.
 - `dreamkg` — the class-only case: classes but no `SourceClass`/`TargetClass`
   metadata, so predicates are emitted as `%%` comments instead of edges.
+- `rdkg` — the probe fallback: no curated CSV at all, so the schema comes from
+  probing the endpoint (bare class/predicate URIs, no labels or endpoints).
 
 ```bash
 # write the diagram (no fences) to a .mermaid file, then:
@@ -52,6 +54,22 @@ predicates. The diagram renders cleanly (exit 0, zero syntax-error markers) as:
   which Mermaid ignores — so no edges are fabricated.
 
 ![Rendered dreamkg schema diagram](dreamkg-schema.png)
+
+## Result — rdkg (probe fallback)
+
+rdkg has no curated CSV, so `get_schema` probes the federation endpoint and
+returns bare class/predicate URIs (no labels, no source/target). The generator
+derives class names from URI local parts; the diagram renders cleanly (exit 0,
+zero syntax-error markers) as:
+
+- **13 class boxes** from probed URIs — `ObjectProperty`, `Ontology`,
+  `AnatomicalEntity`, `BiologicalProcess`, `ChemicalEntity`, `ChemicalExposure`,
+  `Disease`, `Drug`, `ExposureEvent`, `Gene`, `PhenotypicFeature`,
+  `SequenceVariant`, `Treatment`.
+- **21 predicates as `%%` comments** (e.g. `comment`, `label`, `prefLabel`) —
+  probing yields no endpoints, so no edges are fabricated.
+
+![Rendered rdkg schema diagram](rdkg-schema.png)
 
 ## Reproduce
 

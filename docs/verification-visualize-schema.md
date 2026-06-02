@@ -6,16 +6,20 @@ syntactically plausible text.
 
 ## Method
 
-The tool output for `spoke-genelab` (the richest KG: typed node properties,
-labeled edges, and edge predicates with properties) was rendered through the
+Two KGs covering both shapes the generator produces were rendered through the
 real Mermaid engine via `@mermaid-js/mermaid-cli` (headless Chromium):
+
+- `spoke-genelab` — the richest KG: typed node properties, labeled edges, and
+  edge predicates with properties.
+- `dreamkg` — the class-only case: classes but no `SourceClass`/`TargetClass`
+  metadata, so predicates are emitted as `%%` comments instead of edges.
 
 ```bash
 # write the diagram (no fences) to a .mermaid file, then:
 npx -y @mermaid-js/mermaid-cli -i spoke-genelab.mermaid -o spoke-genelab.png -s 2
 ```
 
-## Result
+## Result — spoke-genelab (edges + edge properties)
 
 - Rendered cleanly — exit 0, valid `classDiagram` SVG/PNG, **zero** syntax-error
   markers.
@@ -34,6 +38,20 @@ npx -y @mermaid-js/mermaid-cli -i spoke-genelab.mermaid -o spoke-genelab.png -s 
   - **`direction TB`** yields the intended tall, top-down layout.
 
 ![Rendered spoke-genelab schema diagram](spoke-genelab-schema.png)
+
+## Result — dreamkg (class-only)
+
+dreamkg has 14 schema.org classes but no source/target metadata on its
+predicates. The diagram renders cleanly (exit 0, zero syntax-error markers) as:
+
+- **14 class boxes** — `AdministrativeArea`, `Audience`, `CategoryCode`,
+  `ContactPoint`, `OpeningHoursSpecification`, `Organization`, `Place`,
+  `Service`, `ServiceChannel`, `TextObject`, `WebPage`, `Activity`,
+  `Collection`, `Entity`.
+- **34 predicates as `%%` comments** (e.g. `address`, `name`, `telephone`),
+  which Mermaid ignores — so no edges are fabricated.
+
+![Rendered dreamkg schema diagram](dreamkg-schema.png)
 
 ## Reproduce
 

@@ -13,6 +13,7 @@ directly from the proto-okn server.
 from __future__ import annotations
 
 import csv
+import re
 from io import StringIO
 from typing import Any
 
@@ -372,3 +373,160 @@ async def get_schema(shortname: str, compact: bool = True) -> dict[str, Any]:
         schema = await _probe_schema(shortname)
 
     return {"shortname": shortname, "schema": schema}
+
+
+# ── Mermaid class-diagram generation ─────────────────────────────────────────
+
+
+def _local_name(uri: str) -> str:
+    """Return the last path/fragment segment of a URI."""
+    return re.split(r"[/#]", uri.rstrip("/#"))[-1] if uri else uri
+
+
+def _mermaid_id(name: str) -> str:
+    """Sanitize a label or URI into a Mermaid-safe class identifier."""
+    if name.startswith(("http://", "https://")):
+        name = _local_name(name)
+    ident = re.sub(r"\W+", "_", name or "").strip("_")
+    return ident or "Node"
+
+
+def _member_type(description: str) -> str:
+    """Extract a field type from a trailing ``(type)`` in a property description.
+
+    Returns "" when the description has no such marker — we deliberately do NOT
+    fall back to the entity ``type`` (which is always "EdgeProperty"/
+    "NodeProperty" and useless as a data type).
+    """
+    m = re.search(r"\(([^()]+)\)[.\s]*$", (description or "").strip())
+    if m:
+        candidate = m.group(1).strip()
+        if candidate and " " not in candidate and len(candidate) <= 20:
+            return candidate.lower()
+    return ""
+
+
+def _clean_edge_label(label: str) -> str:
+    """Strip characters that would break a Mermaid relationship label."""
+    return re.sub(r"\s+", " ", (label or "").replace("|", " ").replace("\n", " ")).strip()
+
+
+def build_mermaid_diagram(shortname: str, schema: dict[str, Any]) -> str:
+    """Render a KG's schema as a Mermaid ``classDiagram`` (deterministic).
+
+    Node classes become class boxes (with node properties as members), edge
+    predicates with source/target metadata become labeled arrows, and predicates
+    carrying edge properties become intermediary classes with typed fields
+    wired ``source --> edge --> target``. Predicates lacking source/target
+    metadata are listed as ``%%`` comments rather than guessed at.
+    """
+    classes_tbl = schema.get("classes", {})
+    predicates_tbl = schema.get("predicates", {})
+    node_props_tbl = schema.get("node_properties", {})
+    edge_properties = schema.get("edge_properties", {}) or {}
+
+    declared: dict[str, list[str]] = {}  # class id -> member lines (insertion order)
+    relationships: list[str] = []
+    undrawn: list[str] = []
+
+    def ensure_class(label: str) -> str:
+        cid = _mermaid_id(label)
+        declared.setdefault(cid, [])
+        return cid
+
+    # Node classes (column layout: [uri, label, ...] for metadata, [uri] for probe).
+    cls_cols = classes_tbl.get("columns", [])
+    label_idx = cls_cols.index("label") if "label" in cls_cols else None
+    for row in classes_tbl.get("data", []):
+        if not row:
+            continue
+        label = row[label_idx] if label_idx is not None and len(row) > label_idx else ""
+        ensure_class(label or _local_name(row[0]))
+
+    # Node properties become members of their owning class.
+    np_cols = node_props_tbl.get("columns", [])
+    np_label = np_cols.index("label") if "label" in np_cols else None
+    np_desc = np_cols.index("description") if "description" in np_cols else None
+    np_class = np_cols.index("class") if "class" in np_cols else None
+    for row in node_props_tbl.get("data", []):
+        if not row or np_label is None or np_class is None:
+            continue
+        owner = row[np_class] if len(row) > np_class else ""
+        name = row[np_label] if len(row) > np_label else ""
+        if not owner or not name:
+            continue
+        cid = ensure_class(owner)
+        desc = row[np_desc] if np_desc is not None and len(row) > np_desc else ""
+        member = f"{_member_type(desc)} {_mermaid_id(name)}".strip()
+        if member not in declared[cid]:
+            declared[cid].append(member)
+
+    # Edge predicates with properties → intermediary classes.
+    for rel_label, info in edge_properties.items():
+        edge_id = _mermaid_id(rel_label)
+        members = []
+        for prop in info.get("properties", []):
+            mtype = _member_type(prop.get("description", ""))
+            member = f"{mtype} {_mermaid_id(prop.get('label', ''))}".strip()
+            if member and member not in members:
+                members.append(member)
+        declared[edge_id] = members
+        src, tgt = info.get("source_class", ""), info.get("target_class", "")
+        if src:
+            relationships.append(f"  {ensure_class(src)} --> {edge_id}")
+        if tgt:
+            relationships.append(f"  {edge_id} --> {ensure_class(tgt)}")
+
+    # Plain predicates (no edge properties) with source/target → labeled arrows.
+    pred_cols = predicates_tbl.get("columns", [])
+    p_label = pred_cols.index("label") if "label" in pred_cols else None
+    p_src = pred_cols.index("source_class") if "source_class" in pred_cols else None
+    p_tgt = pred_cols.index("target_class") if "target_class" in pred_cols else None
+    p_has = (
+        pred_cols.index("has_edge_properties")
+        if "has_edge_properties" in pred_cols
+        else None
+    )
+    for row in predicates_tbl.get("data", []):
+        if not row:
+            continue
+        if p_has is not None and len(row) > p_has and row[p_has]:
+            continue  # already drawn as an intermediary class
+        label = row[p_label] if p_label is not None and len(row) > p_label else ""
+        label = label or _local_name(row[0])
+        src = row[p_src] if p_src is not None and len(row) > p_src else ""
+        tgt = row[p_tgt] if p_tgt is not None and len(row) > p_tgt else ""
+        if src and tgt:
+            relationships.append(
+                f"  {ensure_class(src)} --> {ensure_class(tgt)} : {_clean_edge_label(label)}"
+            )
+        else:
+            undrawn.append(_clean_edge_label(label))
+
+    lines = ["classDiagram", "  direction TB"]
+    for cid, members in declared.items():
+        if members:
+            lines.append(f"  class {cid} {{")
+            lines += [f"    {m}" for m in members]
+            lines.append("  }")
+        else:
+            lines.append(f"  class {cid}")
+    lines += relationships
+    if undrawn:
+        lines.append("  %% Predicates without source/target metadata (not drawn):")
+        lines += [f"  %%   - {p}" for p in undrawn]
+
+    return "\n".join(lines)
+
+
+async def visualize_schema(shortname: str) -> dict[str, Any]:
+    """Build a Mermaid ``classDiagram`` of a KG's schema, server-side.
+
+    Returns ``{"shortname", "mermaid"}`` on success, or ``{"shortname",
+    "error"}`` when the KG has no enumerable schema (e.g. ``ubergraph``).
+    """
+    result = await get_schema(shortname, compact=True)
+    if "error" in result:
+        return {"shortname": shortname, "error": result["error"]}
+    diagram = build_mermaid_diagram(shortname, result["schema"])
+    return {"shortname": shortname, "mermaid": diagram}

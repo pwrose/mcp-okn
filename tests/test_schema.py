@@ -4,7 +4,9 @@ from io import StringIO
 from mcp_okn.schema import (
     _build_schema_from_metadata,
     _generate_query_template,
+    _member_type,
     _should_exclude_uri,
+    build_mermaid_diagram,
 )
 
 
@@ -107,3 +109,53 @@ def test_generate_query_template_shape():
 def test_should_exclude_rdf_syntax_uris():
     assert _should_exclude_uri("http://www.w3.org/1999/02/22-rdf-syntax-ns#_1")
     assert not _should_exclude_uri("http://schema.org/Person")
+
+
+def test_member_type_extracts_trailing_parenthetical():
+    assert _member_type("Log2 fold change (float)") == "float"
+    assert _member_type("Adjusted p-value (FDR-corrected). (float)") == "float"
+    # No usable type -> empty (don't treat a sentence in parens as a type).
+    assert _member_type("Some prose (with several words)") == ""
+    assert _member_type("plain description") == ""
+
+
+def test_build_mermaid_diagram_edges_and_intermediary_classes():
+    schema = _build_schema_from_metadata("demo", _parse(EDGE_CSV), compact=True)
+    diagram = build_mermaid_diagram("demo", schema)
+    assert diagram.startswith("classDiagram")
+    assert "direction TB" in diagram
+    # Node classes appear as boxes.
+    assert "class Gene" in diagram
+    assert "class Sample" in diagram
+    # The edge-property predicate becomes an intermediary class with typed fields,
+    # wired source --> edge --> target.
+    assert "class MEASURED_EXPR {" in diagram
+    assert "float log2fc" in diagram
+    assert "Sample --> MEASURED_EXPR" in diagram
+    assert "MEASURED_EXPR --> Gene" in diagram
+
+
+def test_build_mermaid_diagram_lists_undrawn_predicates():
+    # Predicates without source/target metadata are listed as comments, not edges.
+    schema = _build_schema_from_metadata("demo", _parse(SIMPLE_CSV), compact=True)
+    diagram = build_mermaid_diagram("demo", schema)
+    assert "class Person" in diagram
+    assert "%%   - name" in diagram
+    assert "-->" not in diagram  # no endpoints, so nothing is drawn as an edge
+
+
+def test_build_mermaid_diagram_probe_shape_classes_only():
+    # Probe-shape schema (bare uri columns) -> class boxes from local names.
+    schema = {
+        "classes": {"columns": ["uri"], "data": [["http://schema.org/Person"]], "count": 1},
+        "predicates": {
+            "columns": ["uri"],
+            "data": [["http://schema.org/name"]],
+            "count": 1,
+        },
+        "edge_properties": {},
+        "node_properties": {"columns": ["uri"], "data": [], "count": 0},
+    }
+    diagram = build_mermaid_diagram("demo", schema)
+    assert "class Person" in diagram
+    assert "%%   - name" in diagram

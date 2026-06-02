@@ -157,6 +157,29 @@ async def get_schema(shortname: str, compact: bool = True) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def visualize_schema(shortname: str) -> dict[str, Any]:
+    """Generate a Mermaid class diagram of a KG's schema.
+
+    Builds the diagram deterministically from `get_schema` (no drafting needed):
+    node classes become class boxes (with node properties as members), edge
+    predicates become labeled arrows, and predicates that carry edge properties
+    become intermediary classes with typed fields wired `source --> edge -->
+    target`. Predicates lacking source/target metadata are listed as `%%`
+    comments rather than guessed at.
+
+    Args:
+        shortname: The KG shortname (e.g. `spoke-genelab`), as returned by
+            `list_kgs`.
+
+    Returns:
+        `{"shortname": ..., "mermaid": "classDiagram ..."}`. Present the diagram
+        inline by wrapping it in a ```mermaid fenced code block. The string has
+        no fences, so it can also be saved directly as a `.mermaid` file.
+    """
+    return await schema.visualize_schema(shortname)
+
+
+@mcp.tool()
 async def sparql_query(
     query: str, format: str = "json", exploratory: bool = False
 ) -> Any:

@@ -13,7 +13,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import registry, session
+from . import registry, schema, session
 from .sparql import FEDERATION_ENDPOINT, SparqlError, named_graph, run_sparql
 
 INSTRUCTIONS = """\
@@ -23,7 +23,9 @@ Workflow:
 1. Call `list_kgs` to see the available knowledge graphs and their descriptions,
    then choose which one(s) are relevant to the question.
 2. Optionally call `describe_kg` for richer prose context on a chosen KG.
-3. Call `sparql_query` with a SPARQL query that scopes each KG with
+3. Call `get_schema` for each chosen KG to learn its classes, predicates, and
+   property names BEFORE writing SPARQL — each KG has its own schema.
+4. Call `sparql_query` with a SPARQL query that scopes each KG with
    `GRAPH <https://purl.org/okn/frink/kg/{shortname}> { ... }`. A single query
    may span multiple named graphs (that is the point of federation).
 
@@ -102,6 +104,32 @@ async def describe_kg(shortname: str) -> str:
     context before writing a query.
     """
     return await registry.fetch_kg_doc(shortname)
+
+
+@mcp.tool()
+async def get_schema(shortname: str, compact: bool = True) -> dict[str, Any]:
+    """Get the schema (classes, predicates, edge/node properties) for one KG.
+
+    Call this BEFORE writing a `sparql_query` for a KG, to learn its specific
+    entity types, predicates, and property names. Prefers curated metadata and
+    falls back to probing the federation endpoint for the distinct classes and
+    predicates used in the KG's named graph.
+
+    Args:
+        shortname: The KG shortname (e.g. `prokn`, `sawgraph`), as returned by
+            `list_kgs`.
+        compact: If True (default), return the compact schema. Set False to also
+            include an `edge_property_summary` highlighting relationships that
+            carry edge properties (with ready-to-use reification query templates).
+
+    Returns:
+        `{"shortname": ..., "schema": {"classes", "predicates",
+        "edge_properties", "node_properties"}}`. Each of `classes`/`predicates`/
+        `node_properties` is a `{"columns", "data", "count"}` table;
+        `edge_properties` maps relationship names to their properties and a
+        `query_template` showing the RDF reification pattern to query them.
+    """
+    return await schema.get_schema(shortname, compact=compact)
 
 
 @mcp.tool()

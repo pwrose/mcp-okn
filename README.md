@@ -19,6 +19,7 @@ SPARQL queries scoped to one or more named graphs of the form
 | --- | --- |
 | `list_kgs` | List all KGs with `shortname`, `title`, `description`, `homepage`, and `named_graph`. Served from a bundled snapshot for instant cold start. |
 | `describe_kg(shortname)` | Full registry doc (frontmatter + prose) for one KG, for deeper context. |
+| `get_schema(shortname, compact=True)` | Schema for one KG — classes, predicates, edge properties (with reification query templates), and node properties. Uses curated metadata when available, else probes the endpoint for distinct classes/predicates. Call **before** writing a query. |
 | `sparql_query(query, format="json", exploratory=False)` | Run a SPARQL query on the federation endpoint. Substantive results are logged for the transcript unless `exploratory=True`. |
 | `expand_ontology_term(term, relation="subClassOf", direction="descendants", include_self=True, limit=1000)` | Expand an ontology term to its full subtree/closure via the `ubergraph` graph. |
 | `reset_query_log()` | Clear the session query log. Call at the **start** of an analysis to scope a transcript. |

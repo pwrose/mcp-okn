@@ -55,6 +55,68 @@ Or add to your MCP client config (e.g. Claude Desktop `claude_desktop_config.jso
 
 Replace `/path/to/mcp-okn` with the absolute path to your checkout.
 
+## Usage
+
+A typical session walks the tools in order — **discover → inspect → query**.
+Once the server is registered, just ask in natural language; the model drives
+the tools. For example:
+
+> *"Which UniProt diseases in ProKN have a MONDO cross-reference?"*
+
+The model would:
+
+1. **`list_kgs()`** → find `prokn` (the Protein Knowledge Network).
+2. **`get_schema("prokn")`** → confirm it has a `up:Disease` class and that
+   diseases carry `rdfs:seeAlso` cross-references (34 classes, 232 predicates).
+3. **`sparql_query(...)`** → run the query scoped to the `prokn` named graph:
+
+   ```sparql
+   PREFIX up:   <http://purl.uniprot.org/core/>
+   PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+   SELECT DISTINCT ?disease ?mondo WHERE {
+     GRAPH <https://purl.org/okn/frink/kg/prokn> {
+       ?d a up:Disease ; rdfs:label ?disease ; rdfs:seeAlso ?mondo .
+     }
+   } LIMIT 3
+   ```
+
+   ```json
+   {
+     "vars": ["disease", "mondo"],
+     "row_count": 3,
+     "rows": [
+       {"disease": "16p13.2 microdeletion syndrome",
+        "mondo": "http://purl.obolibrary.org/obo/MONDO_0014805"},
+       {"disease": "16p13.2 microdeletion syndrome",
+        "mondo": "http://www.orpha.net/ORDO/Orphanet_643538"},
+       {"disease": "16p13.2 microdeletion syndrome",
+        "mondo": "https://www.omim.org/entry/616863"}
+     ]
+   }
+   ```
+
+To call the tools directly (e.g. from a script) without an MCP client:
+
+```python
+import asyncio
+from mcp_okn import schema
+from mcp_okn.sparql import run_sparql
+
+async def main():
+    print(await schema.get_schema("prokn"))          # inspect the schema
+    result = await run_sparql("""
+        PREFIX up:   <http://purl.uniprot.org/core/>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT DISTINCT ?disease ?mondo WHERE {
+          GRAPH <https://purl.org/okn/frink/kg/prokn> {
+            ?d a up:Disease ; rdfs:label ?disease ; rdfs:seeAlso ?mondo .
+          }
+        } LIMIT 3""")
+    print(result["row_count"], "rows")
+
+asyncio.run(main())
+```
+
 ## Example query
 
 Scope each KG with its named graph (a single query may span several):

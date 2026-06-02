@@ -183,7 +183,9 @@ Reproducible checks of behaviors that aren't covered by the offline unit tests:
   — an `https://schema.org/` query returns 0 rows verbatim but the full result
   set once normalized.
 - [visualize_schema rendering](docs/verification-visualize-schema.md) — the
-  generated Mermaid renders cleanly as a class diagram via `mermaid-cli`.
+  generated Mermaid renders cleanly as a class diagram via `mermaid-cli` across
+  all three schema paths (curated, class-only, probe fallback), and survives the
+  `create_chat_transcript` round-trip.
 
 ## KG snapshot
 

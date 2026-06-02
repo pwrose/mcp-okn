@@ -97,6 +97,12 @@ SCHEMA.ORG URIs: `https://schema.org/...` in a query is rewritten to
 canonical `http://` form, and the two are distinct IRIs to the engine. You may
 write either scheme; both match.
 
+SCHEMA VISUALIZATION: `visualize_schema` returns a ready-made Mermaid diagram.
+Present its `mermaid` string VERBATIM in a single ```mermaid fenced code block
+and nothing else. Do NOT redraw it as SVG/PNG/HTML/an image/an artifact or a
+hand-built diagram — Mermaid clients render the fenced block natively, and
+producing your own graphic yields a messy, incorrect picture.
+
 IMPORTANT: Only the federation endpoint is used. Do not attempt to use the
 per-KG SPARQL endpoints — they are not exposed and time out on complex queries.
 """
@@ -172,9 +178,15 @@ async def visualize_schema(shortname: str) -> dict[str, Any]:
             `list_kgs`.
 
     Returns:
-        `{"shortname": ..., "mermaid": "classDiagram ..."}`. Present the diagram
-        inline by wrapping it in a ```mermaid fenced code block. The string has
-        no fences, so it can also be saved directly as a `.mermaid` file.
+        `{"shortname": ..., "mermaid": "classDiagram ..."}`.
+
+    PRESENTATION (required): present the returned `mermaid` string VERBATIM inside
+    a single ```mermaid fenced code block, and nothing else. Do NOT redraw,
+    re-render, or convert it — in particular do NOT emit SVG, PNG, HTML, an
+    image, an artifact, or a hand-built diagram. Mermaid clients render the
+    fenced block natively; producing your own graphic yields a messy, incorrect
+    picture. Copy the string as-is (it has no fences, so it can also be saved
+    directly as a `.mermaid` file).
 
     The diagram is logged to the session automatically (like queries), so
     `create_chat_transcript` renders it without you re-supplying it.

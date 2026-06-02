@@ -108,6 +108,16 @@ uv run python -c "import asyncio; from mcp_okn.sparql import run_sparql; \
 print(asyncio.run(run_sparql('SELECT ?s WHERE { ?s ?p ?o } LIMIT 3')))"
 ```
 
+### Verification notes
+
+Reproducible checks of behaviors that aren't covered by the offline unit tests:
+
+- [schema.org http/https normalization](docs/verification-schema-org-normalization.md)
+  — an `https://schema.org/` query returns 0 rows verbatim but the full result
+  set once normalized.
+- [visualize_schema rendering](docs/verification-visualize-schema.md) — the
+  generated Mermaid renders cleanly as a class diagram via `mermaid-cli`.
+
 ## KG snapshot
 
 `list_kgs` serves a static snapshot bundled at `src/mcp_okn/data/kgs.json` (~41

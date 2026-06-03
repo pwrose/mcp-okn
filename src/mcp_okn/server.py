@@ -43,12 +43,13 @@ can pass `exploratory=True` to `sparql_query` to keep schema-probing or
 trial-and-error queries out of the record. Call `reset_query_log` at the START of
 an analysis to scope the log, and `create_chat_transcript` at the END to emit a
 reproducible markdown record (prompts, answers, and the verbatim queries +
-results that actually produced findings). The transcript is a standalone
-DOCUMENT: present it in a separate PREVIEW the user can save from — in Claude
-Desktop / claude.ai render it as a Markdown ARTIFACT (the user can then save it
-as `.md` or export to PDF), or, in hosted environments, write it to a `.md` file
-and call a file-presentation tool like `present_files`. Do NOT paste it into the
-chat; reply only with a one-line confirmation.
+results that actually produced findings). You MUST OUTPUT the full transcript
+markdown the tool returns — verbatim and complete; a sentence describing it is
+not enough. Preferably put it in a Markdown ARTIFACT / document (Claude Desktop
+and claude.ai show artifacts in a side panel the user can save as `.md` or
+export to PDF); otherwise output the complete markdown in a fenced ```markdown
+block. NEVER say the transcript is "ready" or "in the preview panel" unless you
+actually emitted its full content — do not fabricate a preview.
 
 ONTOLOGY EXPANSION (read this before answering "all X under category Y" questions):
 Whenever a question covers a CATEGORY of ontology terms — e.g. "all
@@ -420,16 +421,21 @@ async def create_chat_transcript(
         `knowledge_graphs`, `query_log`, `visualizations`, and
         `sparql_endpoint`.
 
-    OUTPUT HANDLING (required): the markdown is a standalone DOCUMENT, not a chat
-    reply. Do NOT paste it into the conversation. Present it in a separate
-    PREVIEW the user can save from:
-      - Claude Desktop / claude.ai: render it as a Markdown ARTIFACT (a
-        document), which opens in the side preview panel where the user can read
-        it and download/save it (`.md`, or export to PDF).
-      - Hosted environments with a file-presentation tool (e.g. `present_files`):
-        write the markdown to a `.md` file and call that tool instead.
-    Reply in chat with only a one-line confirmation. If neither is available, say
-    so and offer the markdown rather than dumping it inline.
+    OUTPUT HANDLING (required): you MUST OUTPUT the full transcript markdown
+    returned by this tool — verbatim and in its entirety. Emitting the content is
+    what lets the user read and save it; a sentence describing or summarizing it
+    is NOT a substitute.
+
+    Preferred: put the complete markdown in a Markdown ARTIFACT / document
+    (Claude Desktop and claude.ai render artifacts in a side panel the user can
+    save as `.md` or export to PDF; a hosted `present_files`-style tool also
+    works). If you cannot create an artifact, output the complete markdown in a
+    fenced ```markdown block in your reply so the user can copy/save it.
+
+    NEVER claim the transcript is "ready", "in the preview panel", or "saved"
+    unless you actually emitted its full content or wrote a file — do not
+    fabricate a preview. Either the document content is present in your response,
+    or you state plainly that you could not produce it.
     """
     when = date or _date.today().isoformat()
     exchanges = exchanges or []

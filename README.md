@@ -166,11 +166,13 @@ and audited without the model re-supplying queries from memory.
   schema" turn shows up in the transcript without re-supplying the diagram. Pass
   `include_visualizations=False` to omit them, or attach a `mermaid` field to an
   exchange to place a diagram inline with that turn.
-- The transcript is a standalone **document** — rather than pasting it into the
-  chat, the model presents it in a separate **preview** the user can save from:
-  in Claude Desktop / claude.ai as a Markdown **artifact** (save as `.md` or
-  export to PDF), or in hosted environments by writing a `.md` file and calling a
-  file-presentation tool such as `present_files`.
+- The transcript is a standalone **document**. The model must **output the full
+  markdown** — preferably as a Markdown **artifact** (Claude Desktop / claude.ai
+  show artifacts in a side panel the user can save as `.md` or export to PDF),
+  otherwise in a fenced ` ```markdown ` block. It must not claim a preview is
+  "ready" without actually emitting the content. (An MCP server can't open a
+  preview panel or create an artifact itself — it only returns the markdown;
+  rendering it is the client/model's job.)
 
 ## Development
 

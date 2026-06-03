@@ -205,6 +205,9 @@ Reproducible checks of behaviors that aren't covered by the offline unit tests:
   generated Mermaid renders cleanly as a class diagram via `mermaid-cli` across
   all three schema paths (curated, class-only, probe fallback), and survives the
   `create_chat_transcript` round-trip.
+- [transcript MCP resource](docs/verification-transcript-resource.md) — the
+  `transcript://session/latest` resource serves the full document via the
+  resource API, with its embedded diagram still rendering.
 
 ## KG snapshot
 

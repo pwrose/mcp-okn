@@ -50,12 +50,14 @@ npx -y @mermaid-js/mermaid-cli -i spoke-genelab.mermaid -o spoke-genelab.png -s 
 dreamkg has 14 schema.org classes but no source/target metadata on its
 predicates. The diagram renders cleanly (exit 0, zero syntax-error markers) as:
 
-- **14 class boxes** — `AdministrativeArea`, `Audience`, `CategoryCode`,
-  `ContactPoint`, `OpeningHoursSpecification`, `Organization`, `Place`,
-  `Service`, `ServiceChannel`, `TextObject`, `WebPage`, `Activity`,
+- **14 class boxes** (all light blue) — `AdministrativeArea`, `Audience`,
+  `CategoryCode`, `ContactPoint`, `OpeningHoursSpecification`, `Organization`,
+  `Place`, `Service`, `ServiceChannel`, `TextObject`, `WebPage`, `Activity`,
   `Collection`, `Entity`.
 - **34 predicates as `%%` comments** (e.g. `address`, `name`, `telephone`),
   which Mermaid ignores — so no edges are fabricated.
+- A **legend with only the "Node class" entry** — the edge-class legend entry is
+  omitted because this KG has no edge classes.
 
 ![Rendered dreamkg schema diagram](dreamkg-schema.png)
 

@@ -166,11 +166,10 @@ and audited without the model re-supplying queries from memory.
   `include_visualizations=False` to omit them, or attach a `mermaid` field to an
   exchange to place a diagram inline with that turn.
 - The transcript is a standalone **document** — rather than pasting it into the
-  chat, the model writes it to a `.md` file and calls `present_files` to open it
-  in a separate **preview window**, where the user can read it and save it (as
-  `.md` or export to `.pdf`). (`present_files` is a host-provided tool; if the
-  client doesn't offer it, the model says so instead of dumping the transcript
-  inline.)
+  chat, the model presents it in a separate **preview** the user can save from:
+  in Claude Desktop / claude.ai as a Markdown **artifact** (save as `.md` or
+  export to PDF), or in hosted environments by writing a `.md` file and calling a
+  file-presentation tool such as `present_files`.
 
 ## Development
 

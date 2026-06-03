@@ -44,10 +44,11 @@ trial-and-error queries out of the record. Call `reset_query_log` at the START o
 an analysis to scope the log, and `create_chat_transcript` at the END to emit a
 reproducible markdown record (prompts, answers, and the verbatim queries +
 results that actually produced findings). The transcript is a standalone
-DOCUMENT: write it to a `.md` file and call `present_files` to open it in a
-separate PREVIEW window where the user can read and save it (as `.md`, or export
-to `.pdf`). Do NOT paste it into the chat; reply only with a one-line
-confirmation.
+DOCUMENT: present it in a separate PREVIEW the user can save from — in Claude
+Desktop / claude.ai render it as a Markdown ARTIFACT (the user can then save it
+as `.md` or export to PDF), or, in hosted environments, write it to a `.md` file
+and call a file-presentation tool like `present_files`. Do NOT paste it into the
+chat; reply only with a one-line confirmation.
 
 ONTOLOGY EXPANSION (read this before answering "all X under category Y" questions):
 Whenever a question covers a CATEGORY of ontology terms — e.g. "all
@@ -414,13 +415,15 @@ async def create_chat_transcript(
         `sparql_endpoint`.
 
     OUTPUT HANDLING (required): the markdown is a standalone DOCUMENT, not a chat
-    reply. Do NOT paste it into the conversation. Instead, write it to a `.md`
-    file (e.g. `~/Downloads/proto-okn-transcript-<topic>-YYYY-MM-DD.md`) and call
-    the `present_files` tool to open it in a separate PREVIEW window, where the
-    user can read it and save it (as `.md`, or export to `.pdf`). In chat, reply
-    only with a one-line confirmation. If `present_files` (or a file-writing
-    tool) is unavailable, say so and offer the markdown rather than dumping it
-    inline.
+    reply. Do NOT paste it into the conversation. Present it in a separate
+    PREVIEW the user can save from:
+      - Claude Desktop / claude.ai: render it as a Markdown ARTIFACT (a
+        document), which opens in the side preview panel where the user can read
+        it and download/save it (`.md`, or export to PDF).
+      - Hosted environments with a file-presentation tool (e.g. `present_files`):
+        write the markdown to a `.md` file and call that tool instead.
+    Reply in chat with only a one-line confirmation. If neither is available, say
+    so and offer the markdown rather than dumping it inline.
     """
     when = date or _date.today().isoformat()
     exchanges = exchanges or []

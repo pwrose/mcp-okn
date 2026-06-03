@@ -29,7 +29,7 @@ _RAW_BASE = (
 
 # KGs listed in the registry but excluded from results — e.g. not loaded in the
 # federation under their expected named graph (queries return no rows).
-EXCLUDED_KGS = {"semopenalex"}
+EXCLUDED_KGS = {"semopenalex", "biohealth"}
 
 # Process-lifetime caches (the registry changes rarely).
 _shortnames_cache: list[str] | None = None

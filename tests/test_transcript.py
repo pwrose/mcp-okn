@@ -1,7 +1,11 @@
 import pytest
 
 from mcp_okn import session
-from mcp_okn.server import create_chat_transcript, _rows_to_table
+from mcp_okn.server import (
+    create_chat_transcript,
+    latest_transcript_resource,
+    _rows_to_table,
+)
 from mcp_okn.sparql import FEDERATION_ENDPOINT
 
 
@@ -302,6 +306,26 @@ async def test_visualize_schema_returns_fenced_block_and_logs_raw(monkeypatch):
     assert viz["mermaid"] == "classDiagram\n  class Gene"
     md = await create_chat_transcript(model="m")
     assert md.count("```mermaid") == 1
+
+
+async def test_transcript_resource_publishes_last_markdown():
+    # Before generating anything, the resource is a placeholder.
+    assert "No transcript yet" in latest_transcript_resource()
+    # After generating a markdown transcript, the resource serves it verbatim.
+    md = await create_chat_transcript(
+        model="m", exchanges=[{"prompt": "hi", "answer": "hello"}]
+    )
+    assert latest_transcript_resource() == md
+    assert "👤 **User**" in latest_transcript_resource()
+    # reset() clears it back to the placeholder.
+    session.reset()
+    assert "No transcript yet" in latest_transcript_resource()
+
+
+async def test_json_transcript_does_not_publish_resource():
+    # Only the markdown rendering is published to the resource.
+    await create_chat_transcript(model="m", format="json")
+    assert "No transcript yet" in latest_transcript_resource()
 
 
 async def test_inline_mermaid_on_a_turn_renders():

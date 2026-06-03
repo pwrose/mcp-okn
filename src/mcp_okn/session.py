@@ -23,6 +23,7 @@ _GRAPH_RE = re.compile(r"GRAPH\s*<https://purl\.org/okn/frink/kg/([^>]+)>")
 
 _log: list[dict[str, Any]] = []
 _visualizations: list[dict[str, Any]] = []
+_last_transcript: str | None = None
 
 
 def graphs_in(query: str) -> list[str]:
@@ -129,12 +130,30 @@ def visualizations() -> list[dict[str, Any]]:
     return list(_visualizations)
 
 
+def set_last_transcript(markdown: str) -> None:
+    """Store the most recently rendered transcript markdown.
+
+    Exposed read-only via the ``transcript://session/latest`` MCP resource so a
+    client can fetch/save the document directly, independent of how (or whether)
+    the model re-emits it.
+    """
+    global _last_transcript
+    _last_transcript = markdown
+
+
+def last_transcript() -> str | None:
+    """Return the most recently rendered transcript markdown, or None."""
+    return _last_transcript
+
+
 def reset() -> int:
-    """Clear the session log (queries and visualizations).
+    """Clear the session log (queries, visualizations, last transcript).
 
     Returns the number of logged queries removed.
     """
+    global _last_transcript
     n = len(_log)
     _log.clear()
     _visualizations.clear()
+    _last_transcript = None
     return n

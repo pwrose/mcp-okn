@@ -27,6 +27,12 @@ SPARQL queries scoped to one or more named graphs of the form
 | `get_query_log()` | Return the queries logged so far this session (only those that returned rows and weren't exploratory). |
 | `create_chat_transcript(model, exchanges, ...)` | Emit a reproducible markdown (or JSON) record of a session — prompts, answers, the verbatim queries + results that produced findings, and any `visualize_schema` diagrams. Call at the **end** of an analysis. |
 
+## Resources
+
+| Resource | Purpose |
+| --- | --- |
+| `transcript://session/latest` (`text/markdown`) | The most recent transcript rendered by `create_chat_transcript`, so a client can fetch/save the document directly (transport-agnostic; works for remote servers). Cleared by `reset_query_log`. |
+
 ## Setup
 
 ```bash
@@ -173,6 +179,11 @@ and audited without the model re-supplying queries from memory.
   "ready" without actually emitting the content. (An MCP server can't open a
   preview panel or create an artifact itself — it only returns the markdown;
   rendering it is the client/model's job.)
+- The rendered markdown is **also published as an MCP resource**,
+  `transcript://session/latest` (`text/markdown`), so a client can fetch and
+  save the document directly — independent of how the model presents it, and
+  transport-agnostic (works the same for a remote server). `reset_query_log`
+  clears it along with the query/diagram log.
 
 ## Development
 

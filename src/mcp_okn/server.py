@@ -49,7 +49,9 @@ not enough. Preferably put it in a Markdown ARTIFACT / document (Claude Desktop
 and claude.ai show artifacts in a side panel the user can save as `.md` or
 export to PDF); otherwise output the complete markdown in a fenced ```markdown
 block. NEVER say the transcript is "ready" or "in the preview panel" unless you
-actually emitted its full content — do not fabricate a preview.
+actually emitted its full content — do not fabricate a preview. (The rendered
+markdown is also published as the MCP resource `transcript://session/latest`,
+which a client can fetch/save directly even for remote servers.)
 
 ONTOLOGY EXPANSION (read this before answering "all X under category Y" questions):
 Whenever a question covers a CATEGORY of ontology terms — e.g. "all
@@ -436,6 +438,11 @@ async def create_chat_transcript(
     unless you actually emitted its full content or wrote a file — do not
     fabricate a preview. Either the document content is present in your response,
     or you state plainly that you could not produce it.
+
+    The rendered markdown is also published as the read-only MCP resource
+    `transcript://session/latest`, so a client can fetch/save it directly
+    (transport-agnostic; works for remote servers) regardless of how you present
+    it. You may point the user there.
     """
     when = date or _date.today().isoformat()
     exchanges = exchanges or []
@@ -540,7 +547,32 @@ async def create_chat_transcript(
                 lines += [f"_{ctx}_", ""]
             lines += ["```mermaid", (viz.get("mermaid") or "").strip(), "```", ""]
 
-    return "\n".join(lines)
+    markdown = "\n".join(lines)
+    # Publish for direct client fetch/save via the transcript resource.
+    session.set_last_transcript(markdown)
+    return markdown
+
+
+@mcp.resource(
+    "transcript://session/latest",
+    name="Latest chat transcript",
+    description=(
+        "The most recent transcript rendered by create_chat_transcript this "
+        "session, as Markdown. Lets a client fetch/save the document directly, "
+        "independent of how the model re-emits it."
+    ),
+    mime_type="text/markdown",
+)
+def latest_transcript_resource() -> str:
+    """Return the last rendered transcript, or a placeholder if none yet."""
+    md = session.last_transcript()
+    if not md:
+        return (
+            "# No transcript yet\n\n"
+            "Call the `create_chat_transcript` tool (markdown format) first; the "
+            "rendered document then appears here."
+        )
+    return md
 
 
 def _render_query(

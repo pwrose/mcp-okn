@@ -1,5 +1,12 @@
 [
   {
+    "shortname": "bio101",
+    "title": "bio101",
+    "description": "",
+    "homepage": null,
+    "named_graph": "https://purl.org/okn/frink/kg/bio101"
+  },
+  {
     "shortname": "biobricks-aopwiki",
     "title": "BioBricks AOP-Wiki",
     "description": "BioBricks AOP-Wiki is an open knowledge graph for Adverse Outcome Pathways from the AOP-Wiki.",
@@ -40,13 +47,6 @@
     "description": "BioBricks ToxCast is an open knowledge graph for EPA ToxCast high-throughput screening data.",
     "homepage": "https://github.com/biobricks-ai/biobricks-okg",
     "named_graph": "https://purl.org/okn/frink/kg/biobricks-toxcast"
-  },
-  {
-    "shortname": "biohealth",
-    "title": "Bio-Health KG",
-    "description": "Bio-Health KG is a dynamically-updated open knowledge network for health, integrating biomedical insights with social determinants of health.",
-    "homepage": null,
-    "named_graph": "https://purl.org/okn/frink/kg/biohealth"
   },
   {
     "shortname": "biomarkerkg",

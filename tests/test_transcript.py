@@ -165,6 +165,32 @@ async def test_inline_queries_on_a_turn_still_render():
     assert "```csv\na,b\n1,2\n```" in md
 
 
+async def test_inline_exploratory_queries_are_dropped():
+    md = await create_chat_transcript(
+        model="m",
+        exchanges=[
+            {
+                "prompt": "q",
+                "queries": [
+                    {
+                        "sparql": "SELECT * { ?s a ?t }",
+                        "description": "Explore NDE schema",
+                        "exploratory": True,
+                    },
+                    {
+                        "sparql": "SELECT * {}",
+                        "description": "real finding",
+                        "results": {"format": "csv", "text": "a\n1"},
+                    },
+                ],
+            }
+        ],
+    )
+    assert "Explore NDE schema" not in md
+    # The findings query still renders, renumbered as Query 1.
+    assert "#### Query 1 — real finding" in md
+
+
 async def test_intermediate_query_rows_omitted_by_default():
     intermediate = {
         "vars": ["x"],

@@ -393,7 +393,12 @@ async def create_chat_transcript(
             `prompt` (str) and optional `answer` (str). You may also attach an
             explicit `queries` list per turn (same shape as the log entries) if
             you want queries shown inline with a specific prompt instead of —
-            or in addition to — the auto-logged appendix.
+            or in addition to — the auto-logged appendix. Attach ONLY queries
+            that produced findings; never attach exploratory/schema-probing
+            queries. A query's optional `description` is a plain, user-facing
+            label of what the query finds (e.g. "Diseases linked to PFAS") —
+            never internal bookkeeping such as "(exploratory, not logged)",
+            "(intermediate)", or notes about logging state.
         kgs_used: Shortnames of the knowledge graphs queried. If omitted, they
             are inferred from the logged queries. Each is expanded to its
             federation named-graph URI.
@@ -521,7 +526,10 @@ async def create_chat_transcript(
         answer = (exchange.get("answer") or "").strip()
         if answer:
             lines += [answer, ""]
-        for j, q in enumerate(exchange.get("queries") or [], start=1):
+        # Only findings-producing queries belong in the transcript; drop any
+        # the model flagged exploratory so schema-probing never leaks in.
+        shown = [q for q in (exchange.get("queries") or []) if not q.get("exploratory")]
+        for j, q in enumerate(shown, start=1):
             lines += _render_query(q, f"Query {j}")
         # Optional Mermaid diagram(s) attached inline to this turn.
         inline = exchange.get("mermaid")

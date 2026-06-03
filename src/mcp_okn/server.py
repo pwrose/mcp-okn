@@ -43,15 +43,17 @@ can pass `exploratory=True` to `sparql_query` to keep schema-probing or
 trial-and-error queries out of the record. Call `reset_query_log` at the START of
 an analysis to scope the log, and `create_chat_transcript` at the END to emit a
 reproducible markdown record (prompts, answers, and the verbatim queries +
-results that actually produced findings). You MUST OUTPUT the full transcript
-markdown the tool returns — verbatim and complete; a sentence describing it is
-not enough. Preferably put it in a Markdown ARTIFACT / document (Claude Desktop
-and claude.ai show artifacts in a side panel the user can save as `.md` or
-export to PDF); otherwise output the complete markdown in a fenced ```markdown
-block. NEVER say the transcript is "ready" or "in the preview panel" unless you
-actually emitted its full content — do not fabricate a preview. (The rendered
-markdown is also published as the MCP resource `transcript://session/latest`,
-which a client can fetch/save directly even for remote servers.)
+results that actually produced findings). SAVE the full transcript markdown the
+tool returns — verbatim and complete — as a downloadable `.md` file via your
+file-creation capability (the same behavior as "save the transcript as a file":
+the `.md` appears in the preview panel, downloadable from the chat); a Markdown
+ARTIFACT / document does the same. A sentence describing it is not enough. Only
+if you cannot write a file, output the complete markdown in a fenced ```markdown
+block. NEVER say the transcript is "ready", "in the preview panel", or "saved"
+unless you actually wrote the file or emitted its full content — do not fabricate
+a preview. (The rendered markdown is also published as the MCP resource
+`transcript://session/latest`, which a client can fetch/save directly even for
+remote servers.)
 
 ONTOLOGY EXPANSION (read this before answering "all X under category Y" questions):
 Whenever a question covers a CATEGORY of ontology terms — e.g. "all
@@ -423,21 +425,25 @@ async def create_chat_transcript(
         `knowledge_graphs`, `query_log`, `visualizations`, and
         `sparql_endpoint`.
 
-    OUTPUT HANDLING (required): you MUST OUTPUT the full transcript markdown
-    returned by this tool — verbatim and in its entirety. Emitting the content is
-    what lets the user read and save it; a sentence describing or summarizing it
+    OUTPUT HANDLING (required): SAVE the transcript as a downloadable file.
+    Write the full markdown returned by this tool — verbatim and in its
+    entirety — to a `.md` file using your file-creation capability (the same
+    thing that happens when a user says "save the transcript as a file": the
+    `.md` is written and shown in the preview panel, downloadable directly from
+    the chat). A Markdown ARTIFACT / document achieves the same result (Claude
+    Desktop and claude.ai render it in a side panel the user can save as `.md`
+    or export to PDF; a hosted `present_files`-style tool also works). Creating
+    the file is the goal — a sentence describing or summarizing the transcript
     is NOT a substitute.
 
-    Preferred: put the complete markdown in a Markdown ARTIFACT / document
-    (Claude Desktop and claude.ai render artifacts in a side panel the user can
-    save as `.md` or export to PDF; a hosted `present_files`-style tool also
-    works). If you cannot create an artifact, output the complete markdown in a
-    fenced ```markdown block in your reply so the user can copy/save it.
+    Only if you genuinely cannot write a file or artifact, fall back to
+    outputting the complete markdown in a fenced ```markdown block in your reply
+    so the user can copy/save it.
 
     NEVER claim the transcript is "ready", "in the preview panel", or "saved"
-    unless you actually emitted its full content or wrote a file — do not
-    fabricate a preview. Either the document content is present in your response,
-    or you state plainly that you could not produce it.
+    unless you actually wrote the file (or emitted its full content) — do not
+    fabricate a preview. Either the file exists / the document content is present
+    in your response, or you state plainly that you could not produce it.
 
     The rendered markdown is also published as the read-only MCP resource
     `transcript://session/latest`, so a client can fetch/save it directly

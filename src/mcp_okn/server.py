@@ -247,28 +247,40 @@ _PREDICATE_PREFIXES = {
     "owl": "http://www.w3.org/2002/07/owl#",
 }
 
-# Distribution of object namespaces for one predicate. For each object value we
+# Per-object namespace classification, applied inside the GROUP BY below. We
 # take the local part (after the last `/` or `#`); if it looks like an ontology
 # CURIE/local id — an alpha prefix, then `_`/`:`, then an alphanumeric id that
 # contains a digit (`MONDO_0005240`, `MONDO:0005240`, `NCIT_C3137`) — we report
 # the prefix (`MONDO`, `NCIT`), otherwise we fall back to the base IRI namespace.
 # Requiring a digit in the id avoids splitting ordinary `foo_bar`-style locals.
-# Grouped + counted server-side so one query answers "which vocabularies
-# populate this edge".
-_NAMESPACE_QUERY = """\
-SELECT ?namespace (COUNT(*) AS ?count) WHERE {{
-  GRAPH <{ng}> {{ ?s <{pred}> ?o . }}
+_NS_CLASSIFY = """\
   BIND(STR(?o) AS ?ostr)
   BIND(REPLACE(?ostr, "^.*[/#]", "") AS ?local)
   BIND(
     IF(REGEX(?local, "^[A-Za-z][A-Za-z0-9]*[_:][A-Za-z0-9]*[0-9]"),
        REPLACE(?local, "^([A-Za-z][A-Za-z0-9]*)[_:].*$", "$1"),
        REPLACE(?ostr, "[^/#]*$", "")) AS ?namespace
-  )
-}}
-GROUP BY ?namespace
-ORDER BY DESC(?count)
-"""
+  )"""
+
+
+def _namespace_query(ng: str, pred: str, sample: int = 0) -> str:
+    """Build the namespace-distribution query for a predicate's objects.
+
+    Grouped + counted server-side so one query answers "which vocabularies
+    populate this edge". When ``sample > 0`` the objects are first capped by an
+    inner ``LIMIT`` subquery — a fast, representative profile for huge predicates
+    where a full scan would time out — otherwise every object is counted exactly.
+    """
+    triple = f"GRAPH <{ng}> {{ ?s <{pred}> ?o . }}"
+    inner = triple if sample <= 0 else f"{{ SELECT ?o WHERE {{ {triple} }} LIMIT {sample} }}"
+    return (
+        "SELECT ?namespace (COUNT(*) AS ?count) WHERE {\n"
+        f"  {inner}\n"
+        f"{_NS_CLASSIFY}\n"
+        "}\n"
+        "GROUP BY ?namespace\n"
+        "ORDER BY DESC(?count)\n"
+    )
 
 
 def _predicate_to_iri(predicate: str) -> str | None:
@@ -284,7 +296,9 @@ def _predicate_to_iri(predicate: str) -> str | None:
 
 
 @mcp.tool()
-async def probe_namespaces(shortname: str, predicate: str) -> dict[str, Any]:
+async def probe_namespaces(
+    shortname: str, predicate: str, sample: int = 0
+) -> dict[str, Any]:
     """Report which identifier/ontology namespaces populate a predicate's objects.
 
     Schema introspection (`get_schema`) tells you a KG's predicates but NOT which
@@ -299,13 +313,18 @@ async def probe_namespaces(shortname: str, predicate: str) -> dict[str, Any]:
         predicate: The predicate whose objects to profile, as a full IRI or a
             known CURIE (`schema:healthCondition`, `rdfs:seeAlso`, `MONDO:...`).
             Get the exact predicate from `get_schema`.
+        sample: 0 (default) counts every object exactly. Set a positive N to
+            profile only the first N objects via an inner `LIMIT` — a fast,
+            representative distribution for very large predicates where a full
+            scan would time out. Counts are then over the sample, not the graph.
 
     Returns:
         `{"shortname", "predicate", "namespaces": [{"namespace", "count"}, ...]
-        sorted by count desc, "total"}`. A `namespace` is an ontology prefix
-        (`MONDO`, `DOID`, `MeSH`) when objects are CURIE-style, else the base
-        IRI namespace. An OBO prefix (MONDO/DOID/HP/CHEBI/…) can then be joined
-        to ubergraph's `rdfs:subClassOf*` hierarchy for category expansion.
+        sorted by count desc, "total", "sampled"}`. A `namespace` is an ontology
+        prefix (`MONDO`, `DOID`, `MeSH`) when objects are CURIE-style, else the
+        base IRI namespace; an OBO prefix (MONDO/DOID/HP/CHEBI/…) can then be
+        joined to ubergraph's `rdfs:subClassOf*` hierarchy for category
+        expansion. `sampled` is the `LIMIT` used, or null for an exact full scan.
 
     This is an exploratory probe — it is NOT recorded in the session/transcript.
     """
@@ -318,7 +337,7 @@ async def probe_namespaces(shortname: str, predicate: str) -> dict[str, Any]:
                 f"OBO prefix like MONDO:). Get the predicate IRI from get_schema."
             )
         }
-    query = _NAMESPACE_QUERY.format(ng=named_graph(shortname), pred=iri)
+    query = _namespace_query(named_graph(shortname), iri, sample=sample)
     try:
         result = await run_sparql(query, fmt="json")
     except SparqlError as exc:
@@ -332,6 +351,7 @@ async def probe_namespaces(shortname: str, predicate: str) -> dict[str, Any]:
         "predicate": iri,
         "namespaces": namespaces,
         "total": sum(n["count"] for n in namespaces),
+        "sampled": sample if sample > 0 else None,
     }
 
 

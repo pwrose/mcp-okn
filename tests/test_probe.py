@@ -1,5 +1,5 @@
 import mcp_okn.server as srv
-from mcp_okn.server import _predicate_to_iri, probe_namespaces, _NAMESPACE_QUERY
+from mcp_okn.server import _predicate_to_iri, probe_namespaces, _namespace_query
 
 
 def test_predicate_to_iri_resolves_curies_and_iris():
@@ -37,6 +37,22 @@ async def test_probe_namespaces_aggregates_rows(monkeypatch):
     # Query is scoped to the KG's named graph and the resolved predicate IRI.
     assert "https://purl.org/okn/frink/kg/nde" in captured["query"]
     assert "http://schema.org/healthCondition" in captured["query"]
+    # Default run is an exact full scan.
+    assert out["sampled"] is None
+    assert "LIMIT" not in captured["query"]
+
+
+async def test_probe_namespaces_passes_sample_through(monkeypatch):
+    captured = {}
+
+    async def fake_run(query, fmt="json", **kw):
+        captured["query"] = query
+        return {"vars": ["namespace", "count"], "rows": [], "row_count": 0}
+
+    monkeypatch.setattr(srv, "run_sparql", fake_run)
+    out = await probe_namespaces("nde", "schema:healthCondition", sample=2000)
+    assert out["sampled"] == 2000
+    assert "LIMIT 2000" in captured["query"]
 
 
 async def test_probe_namespaces_rejects_unresolvable_predicate(monkeypatch):
@@ -54,9 +70,20 @@ async def test_probe_namespaces_rejects_unresolvable_predicate(monkeypatch):
 
 
 def test_namespace_query_extracts_obo_prefix_logic():
-    # Sanity: the template references the grouping var and the alpha-prefix regex.
-    assert "GROUP BY ?namespace" in _NAMESPACE_QUERY
-    assert "[_:][A-Za-z0-9]*[0-9]" in _NAMESPACE_QUERY
+    # Sanity: the built query references the grouping var and alpha-prefix regex.
+    q = _namespace_query("NG", "http://p")
+    assert "GROUP BY ?namespace" in q
+    assert "[_:][A-Za-z0-9]*[0-9]" in q
+    assert "LIMIT" not in q  # exact full scan by default
+
+
+def test_namespace_query_sample_wraps_limit_subquery():
+    q = _namespace_query("NG", "http://p", sample=5000)
+    assert "LIMIT 5000" in q
+    assert "SELECT ?o WHERE" in q  # inner sampling subquery
+    # Zero/negative is treated as an exact full scan.
+    assert "LIMIT" not in _namespace_query("NG", "http://p", sample=0)
+    assert "LIMIT" not in _namespace_query("NG", "http://p", sample=-10)
 
 
 async def test_get_schema_surfaces_probe_namespaces_hint(monkeypatch):

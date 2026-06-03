@@ -166,8 +166,11 @@ and audited without the model re-supplying queries from memory.
   `include_visualizations=False` to omit them, or attach a `mermaid` field to an
   exchange to place a diagram inline with that turn.
 - The transcript is a standalone **document** — rather than pasting it into the
-  chat, the model confirms it's ready and offers to save it as a **`.md` or
-  `.pdf`** file, exporting it only if the user asks.
+  chat, the model writes it to a `.md` file and calls `present_files` to open it
+  in a separate **preview window**, where the user can read it and save it (as
+  `.md` or export to `.pdf`). (`present_files` is a host-provided tool; if the
+  client doesn't offer it, the model says so instead of dumping the transcript
+  inline.)
 
 ## Development
 

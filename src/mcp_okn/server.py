@@ -8,6 +8,7 @@ the registry are never used.
 
 from __future__ import annotations
 
+import re
 from datetime import date as _date
 from typing import Any
 
@@ -589,6 +590,24 @@ def latest_transcript_resource() -> str:
     return md
 
 
+# Internal bookkeeping the model sometimes buries in a query `description`
+# (e.g. "Explore NDE schema (exploratory, not logged)"). It has no value to the
+# user, so strip it from the rendered heading. Matches a parenthetical/bracketed
+# group, or a trailing dash/comma note, containing a bookkeeping keyword.
+_DESC_NOISE_RE = re.compile(
+    r"\s*[\(\[][^\)\]]*\b(?:exploratory|not\s+logged|intermediate|logging)\b[^\)\]]*[\)\]]"
+    r"|\s*[—–\-,]\s*(?:exploratory|not\s+logged|intermediate)\b[^.;]*",
+    re.IGNORECASE,
+)
+
+
+def _clean_description(desc: str | None) -> str:
+    """Strip internal bookkeeping noise from a query description for display."""
+    text = _DESC_NOISE_RE.sub("", desc or "")
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    return text.rstrip(" —–-,;:").strip()
+
+
 def _render_query(
     q: dict[str, Any],
     label: str,
@@ -600,7 +619,7 @@ def _render_query(
     When ``show_results`` is False, the result rows are omitted and replaced by a
     one-line row-count note — used for intermediate queries in the log appendix.
     """
-    desc = (q.get("description") or "").strip()
+    desc = _clean_description(q.get("description"))
     heading = f"#### {label}" + (f" — {desc}" if desc else "")
     lines = [heading, ""]
     if subheading:

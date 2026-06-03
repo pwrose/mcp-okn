@@ -4,6 +4,7 @@ from mcp_okn import session
 from mcp_okn.server import (
     create_chat_transcript,
     latest_transcript_resource,
+    _clean_description,
     _rows_to_table,
 )
 from mcp_okn.sparql import FEDERATION_ENDPOINT
@@ -189,6 +190,40 @@ async def test_inline_exploratory_queries_are_dropped():
     assert "Explore NDE schema" not in md
     # The findings query still renders, renumbered as Query 1.
     assert "#### Query 1 — real finding" in md
+
+
+def test_clean_description_strips_buried_bookkeeping():
+    cases = {
+        "Explore NDE schema (exploratory, not logged)": "Explore NDE schema",
+        "Diseases in NDE (intermediate)": "Diseases in NDE",
+        "Schema probe — exploratory, not logged": "Schema probe",
+        "Find PFAS sites (not logged)": "Find PFAS sites",
+        # Legitimate parentheticals are left intact.
+        "Diseases (PFAS-linked)": "Diseases (PFAS-linked)",
+        "Plain label": "Plain label",
+    }
+    for raw, expected in cases.items():
+        assert _clean_description(raw) == expected
+
+
+async def test_buried_exploratory_text_stripped_in_render():
+    md = await create_chat_transcript(
+        model="m",
+        exchanges=[
+            {
+                "prompt": "q",
+                "queries": [
+                    {
+                        "sparql": "SELECT * {}",
+                        "description": "Explore NDE schema (exploratory, not logged)",
+                        "results": {"format": "csv", "text": "a\n1"},
+                    }
+                ],
+            }
+        ],
+    )
+    assert "exploratory" not in md.lower()
+    assert "#### Query 1 — Explore NDE schema" in md
 
 
 async def test_intermediate_query_rows_omitted_by_default():

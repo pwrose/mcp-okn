@@ -1,12 +1,14 @@
 import csv
 from io import StringIO
 
+import mcp_okn.schema as schema_mod
 from mcp_okn.schema import (
     _build_schema_from_metadata,
     _generate_query_template,
     _member_type,
     _should_exclude_uri,
     build_mermaid_diagram,
+    infer_edge_labels,
 )
 
 
@@ -154,6 +156,40 @@ def test_build_mermaid_diagram_lists_undrawn_predicates():
     # No edge classes -> legend has the node entry only.
     assert 'class LegendNodeClass["Node class"]' in diagram
     assert "LegendEdgeClass" not in diagram
+
+
+def test_inferred_edges_drawn_and_excluded_from_undrawn():
+    # SIMPLE_CSV has class Person and predicate `name` with no endpoints — `name`
+    # is normally listed as undrawn. An inferred edge draws it and drops the note.
+    schema = _build_schema_from_metadata("demo", _parse(SIMPLE_CSV), compact=True)
+    diagram = build_mermaid_diagram(
+        "demo", schema, inferred_edges=[("Person", "name", "Person")]
+    )
+    assert "Person --> Person : name" in diagram
+    assert "%%   - name" not in diagram
+
+
+async def test_infer_edge_labels_skips_when_curated_edges_exist():
+    # EDGE_CSV declares source/target — inference must be a no-op (and make no
+    # network call, since it returns before querying).
+    schema = _build_schema_from_metadata("demo", _parse(EDGE_CSV), compact=True)
+    assert await infer_edge_labels("demo", schema) == []
+
+
+async def test_infer_edge_labels_maps_uris_to_labels(monkeypatch):
+    schema = _build_schema_from_metadata("demo", _parse(SIMPLE_CSV), compact=True)
+
+    async def fake_infer(shortname, class_uris, pred_uris, limit=400):
+        return [
+            (
+                "http://schema.org/name",
+                "http://schema.org/Person",
+                "http://schema.org/Person",
+            )
+        ]
+
+    monkeypatch.setattr(schema_mod, "infer_curated_edges", fake_infer)
+    assert await infer_edge_labels("demo", schema) == [("Person", "name", "Person")]
 
 
 def test_build_mermaid_diagram_probe_shape_classes_only():

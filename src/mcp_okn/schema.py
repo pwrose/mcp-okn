@@ -19,7 +19,7 @@ from typing import Any
 
 import httpx
 
-from .sparql import named_graph, run_sparql
+from .sparql import SparqlError, named_graph, run_sparql
 
 #: Where the curated per-KG entity metadata CSVs live.
 ENTITY_METADATA_BASE = (
@@ -419,14 +419,116 @@ def _clean_edge_label(label: str) -> str:
     return re.sub(r"\s+", " ", (label or "").replace("|", " ").replace("\n", " ")).strip()
 
 
-def build_mermaid_diagram(shortname: str, schema: dict[str, Any]) -> str:
+def _col(table: dict[str, Any], name: str) -> int | None:
+    cols = table.get("columns", [])
+    return cols.index(name) if name in cols else None
+
+
+def _row_value(row: list[Any], idx: int | None) -> str:
+    return row[idx] if idx is not None and len(row) > idx and row[idx] else ""
+
+
+async def infer_curated_edges(
+    shortname: str,
+    class_uris: list[str],
+    pred_uris: list[str],
+    limit: int = 400,
+) -> list[tuple[str, str, str]]:
+    """Infer ``(predicate, domain, range)`` URI triples from the graph's
+    ``rdfs:domain``/``rdfs:range``, restricted to the given curated class and
+    predicate URIs.
+
+    Used when a KG's curated metadata names predicates but not their endpoints
+    (e.g. ``sawgraph``): the graph itself often declares domain/range, and
+    scoping both ends to curated classes keeps the result bounded and aligned
+    with the schema. Returns ``[]`` on error or when nothing matches.
+    """
+    if not class_uris or not pred_uris:
+        return []
+    graph = named_graph(shortname)
+    values_d = " ".join(f"<{u}>" for u in class_uris)
+    values_p = " ".join(f"<{u}>" for u in pred_uris)
+    query = f"""\
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT DISTINCT ?p ?d ?r WHERE {{
+  GRAPH <{graph}> {{
+    ?p rdfs:domain ?d ; rdfs:range ?r .
+    VALUES ?p {{ {values_p} }}
+    VALUES ?d {{ {values_d} }}
+    VALUES ?r {{ {values_d} }}
+  }}
+}} LIMIT {int(limit)}"""
+    try:
+        rows = (await run_sparql(query)).get("rows", [])
+    except SparqlError:
+        return []
+    return [
+        (r["p"], r["d"], r["r"])
+        for r in rows
+        if r.get("p") and r.get("d") and r.get("r")
+    ]
+
+
+async def infer_edge_labels(
+    shortname: str, schema: dict[str, Any]
+) -> list[tuple[str, str, str]]:
+    """Return inferred ``(source_label, predicate_label, target_label)`` edges.
+
+    No-op (returns ``[]``) when the schema already has curated predicate
+    endpoints — we only fill the gap, never override curated relationships.
+    """
+    classes_tbl = schema.get("classes", {})
+    predicates_tbl = schema.get("predicates", {})
+    p_src, p_tgt = _col(predicates_tbl, "source_class"), _col(predicates_tbl, "target_class")
+
+    # If any curated predicate already declares both endpoints, don't infer.
+    if p_src is not None and p_tgt is not None:
+        for row in predicates_tbl.get("data", []):
+            if _row_value(row, p_src) and _row_value(row, p_tgt):
+                return []
+
+    cls_label = _col(classes_tbl, "label")
+    pred_label = _col(predicates_tbl, "label")
+    class_rows = [r for r in classes_tbl.get("data", []) if r]
+    pred_rows = [r for r in predicates_tbl.get("data", []) if r]
+    uri_to_class = {
+        r[0]: (_row_value(r, cls_label) or _local_name(r[0])) for r in class_rows
+    }
+    uri_to_pred = {
+        r[0]: (_row_value(r, pred_label) or _local_name(r[0])) for r in pred_rows
+    }
+
+    triples = await infer_curated_edges(
+        shortname, list(uri_to_class), list(uri_to_pred)
+    )
+    edges: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for p, d, r in triples:
+        src, tgt, label = uri_to_class.get(d), uri_to_class.get(r), uri_to_pred.get(p)
+        if not (src and tgt and label):
+            continue
+        key = (src, label, tgt)
+        if key not in seen:
+            seen.add(key)
+            edges.append(key)
+    return edges
+
+
+def build_mermaid_diagram(
+    shortname: str,
+    schema: dict[str, Any],
+    inferred_edges: list[tuple[str, str, str]] | None = None,
+) -> str:
     """Render a KG's schema as a Mermaid ``classDiagram`` (deterministic).
 
     Node classes become class boxes (with node properties as members), edge
     predicates with source/target metadata become labeled arrows, and predicates
     carrying edge properties become intermediary classes with typed fields
-    wired ``source --> edge --> target``. Predicates lacking source/target
-    metadata are listed as ``%%`` comments rather than guessed at.
+    wired ``source --> edge --> target``. ``inferred_edges`` (optional
+    ``(source_label, predicate_label, target_label)`` triples recovered from the
+    graph's domain/range) are drawn as labeled arrows for KGs whose curated
+    metadata lacks endpoints. Predicates that remain without endpoints are listed
+    as ``%%`` comments rather than guessed at.
     """
     classes_tbl = schema.get("classes", {})
     predicates_tbl = schema.get("predicates", {})
@@ -488,6 +590,15 @@ def build_mermaid_diagram(shortname: str, schema: dict[str, Any]) -> str:
         if tgt:
             relationships.append(f"  {edge_id} --> {ensure_class(tgt)}")
 
+    # Edges inferred from the graph's domain/range (when curated metadata lacks
+    # endpoints). Their predicate labels are excluded from the "undrawn" list.
+    inferred_labels: set[str] = set()
+    for src, pred, tgt in inferred_edges or []:
+        relationships.append(
+            f"  {ensure_class(src)} --> {ensure_class(tgt)} : {_clean_edge_label(pred)}"
+        )
+        inferred_labels.add(pred)
+
     # Plain predicates (no edge properties) with source/target → labeled arrows.
     pred_cols = predicates_tbl.get("columns", [])
     p_label = pred_cols.index("label") if "label" in pred_cols else None
@@ -511,7 +622,7 @@ def build_mermaid_diagram(shortname: str, schema: dict[str, Any]) -> str:
             relationships.append(
                 f"  {ensure_class(src)} --> {ensure_class(tgt)} : {_clean_edge_label(label)}"
             )
-        else:
+        elif label not in inferred_labels:
             undrawn.append(_clean_edge_label(label))
 
     lines = ["classDiagram", "  direction TB"]
@@ -560,5 +671,7 @@ async def visualize_schema(shortname: str) -> dict[str, Any]:
     result = await get_schema(shortname, compact=True)
     if "error" in result:
         return {"shortname": shortname, "error": result["error"]}
-    diagram = build_mermaid_diagram(shortname, result["schema"])
+    schema = result["schema"]
+    inferred = await infer_edge_labels(shortname, schema)
+    diagram = build_mermaid_diagram(shortname, schema, inferred_edges=inferred)
     return {"shortname": shortname, "mermaid": diagram}

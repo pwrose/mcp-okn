@@ -77,6 +77,25 @@ zero syntax-error markers) as:
 
 ![Rendered rdkg schema diagram](rdkg-schema.png)
 
+## Result — sawgraph (domain/range edge inference)
+
+sawgraph's curated CSV names 23 predicates but has no `SourceClass`/`TargetClass`
+columns, so curated metadata yields **0 edges** — leaving 34 disconnected class
+boxes that Mermaid lays out in one unreadable horizontal row. Because the graph
+itself declares `rdfs:domain`/`rdfs:range`, `visualize_schema` recovers edges
+from those, scoped to the curated classes:
+
+- **57 edges drawn** (e.g. `Contaminant Observation --analyzed sample-->
+  Material Sample`, `Material Sample --from sample point--> Sample Point`),
+  connecting the schema into a readable graph (exit 0, zero syntax errors).
+- **10 predicates remain as `%%` comments** — their declared domain/range fall
+  outside the curated class set, so they are listed rather than guessed at.
+- Inference only fires when curated endpoints are absent; KGs with curated edges
+  (spoke-genelab) are unaffected, and KGs without domain/range (dreamkg) fall
+  back to the comment list.
+
+![Rendered sawgraph schema diagram](sawgraph-schema.png)
+
 ## Result — transcript round-trip (end-to-end)
 
 Confirms a `visualize_schema` diagram survives into `create_chat_transcript` and

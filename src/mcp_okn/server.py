@@ -411,9 +411,11 @@ async def create_chat_transcript(
             automatically — you do NOT need to re-supply them.
 
     Returns:
-        For `markdown`: the transcript string, with each query in a fenced
-        ```sparql block followed by its results as a table/code block, and each
-        schema diagram in a fenced ```mermaid block.
+        For `markdown`: the transcript string. Each conversation turn is
+        rendered in the mcp-proto-okn style — a "👤 **User**" block (the prompt)
+        and a "🧠 **Assistant**" block (the answer), separated by a rule — with
+        queries in fenced ```sparql blocks (plus result tables) and schema
+        diagrams in fenced ```mermaid blocks under the answer.
         For `json`: a dict with `title`, `date`, `model`, `exchanges`,
         `knowledge_graphs`, `query_log`, `visualizations`, and
         `sparql_endpoint`.
@@ -484,13 +486,24 @@ async def create_chat_transcript(
     lines += ["", "## Conversation", ""]
     if not exchanges:
         lines += ["_No prompts recorded._", ""]
-    for i, exchange in enumerate(exchanges, start=1):
-        lines += [f"### {i}. {exchange.get('prompt', '(no prompt)')}", ""]
-        for j, q in enumerate(exchange.get("queries") or [], start=1):
-            lines += _render_query(q, f"Query {j}")
+    for exchange in exchanges:
+        # mcp-proto-okn style: each turn is a 👤 User block and a 🧠 Assistant
+        # block separated by a rule; queries/diagrams render under the answer.
+        lines += [
+            "👤 **User**",
+            "",
+            exchange.get("prompt", "(no prompt)"),
+            "",
+            "---",
+            "",
+            "🧠 **Assistant**",
+            "",
+        ]
         answer = (exchange.get("answer") or "").strip()
         if answer:
-            lines += ["**Answer:**", "", answer, ""]
+            lines += [answer, ""]
+        for j, q in enumerate(exchange.get("queries") or [], start=1):
+            lines += _render_query(q, f"Query {j}")
         # Optional Mermaid diagram(s) attached inline to this turn.
         inline = exchange.get("mermaid")
         for diagram in [inline] if isinstance(inline, str) else (inline or []):

@@ -79,9 +79,11 @@ async def test_transcript_renders_logged_queries_as_ground_truth():
     assert FEDERATION_ENDPOINT in md
     # KGs inferred from the log, not supplied by the caller
     assert "`sawgraph` — <https://purl.org/okn/frink/kg/sawgraph>" in md
-    # conversation
-    assert "### 1. Which diseases relate to PFAS?" in md
-    assert "**Answer:**" in md
+    # conversation — mcp-proto-okn style (👤 User / 🧠 Assistant)
+    assert "👤 **User**" in md
+    assert "Which diseases relate to PFAS?" in md
+    assert "🧠 **Assistant**" in md
+    assert "Two cancers are associated." in md
     # ground-truth query section with the verbatim query and a results table
     assert "## SPARQL queries executed" in md
     assert "GRAPH <https://purl.org/okn/frink/kg/sawgraph>" in md
@@ -125,7 +127,7 @@ async def test_include_query_log_false_omits_section():
         include_query_log=False,
     )
     assert "## SPARQL queries executed" not in md
-    assert "### 1. hi" in md
+    assert "👤 **User**" in md and "hi" in md
 
 
 async def test_explicit_kgs_override_inference():

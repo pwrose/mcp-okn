@@ -153,8 +153,9 @@ and audited without the model re-supplying queries from memory.
 - Call `create_chat_transcript` at the **end** to render a markdown (or JSON)
   document: session provenance (date, model, endpoint), the knowledge graphs
   used, the conversation (prompts + your answers), and every logged query
-  verbatim. Up to `MAX_LOGGED_ROWS` (1000) rows are stored per query; the true
-  row count is always preserved.
+  verbatim. Each turn is rendered in the mcp-proto-okn style — a 👤 **User**
+  block and a 🧠 **Assistant** block separated by a rule. Up to `MAX_LOGGED_ROWS`
+  (1000) rows are stored per query; the true row count is always preserved.
 - By default only the **final** logged query's result rows are rendered;
   intermediate queries show their SPARQL and row count but omit the table, to
   keep the transcript focused on the queries that produced the findings. Pass

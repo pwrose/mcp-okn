@@ -175,8 +175,10 @@ async def visualize_schema(shortname: str) -> dict[str, Any]:
     node classes become class boxes (with node properties as members), edge
     predicates become labeled arrows, and predicates that carry edge properties
     become intermediary classes with typed fields wired `source --> edge -->
-    target`. Predicates lacking source/target metadata are listed as `%%`
-    comments rather than guessed at.
+    target`. Node (entity) classes are colored light blue and edge
+    (relationship) classes orange, with a legend showing both; predicates
+    lacking source/target metadata are listed as `%%` comments rather than
+    guessed at.
 
     Args:
         shortname: The KG shortname (e.g. `spoke-genelab`), as returned by

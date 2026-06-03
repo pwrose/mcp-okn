@@ -33,10 +33,12 @@ _SCHEMA_NS = "https://purl.org/okn/frink/kg/{shortname}/schema/"
 #: KGs too large to enumerate a schema for via brute-force SPARQL probing.
 _TOO_LARGE = {"ubergraph"}
 
-#: Mermaid `style` declaration applied to edge (relationship) classes so they
-#: read differently from node classes. The per-class `style` statement is the
-#: form that actually renders fills in `classDiagram` (a `classDef` + `:::`
-#: assignment parses but emits no fill in current Mermaid).
+#: Mermaid `style` declarations distinguishing the two kinds of class box. Node
+#: (entity) classes are light blue; edge (relationship) classes are orange. The
+#: per-class `style` statement is the form that actually renders fills in
+#: `classDiagram` (a `classDef` + `:::` assignment parses but emits no fill in
+#: current Mermaid).
+_NODE_CLASS_STYLE = "fill:#BBDEFB,stroke:#1565C0,color:#000"
 _EDGE_CLASS_STYLE = "fill:#FFE0B2,stroke:#E65100,color:#000"
 
 # Process-lifetime cache of parsed entity metadata, keyed by shortname.
@@ -521,9 +523,27 @@ def build_mermaid_diagram(shortname: str, schema: dict[str, Any]) -> str:
         else:
             lines.append(f"  class {cid}")
     lines += relationships
-    if edge_class_ids:
-        lines.append("  %% Edge (relationship) classes — styled to stand out:")
-        lines += [f"  style {cid} {_EDGE_CLASS_STYLE}" for cid in edge_class_ids]
+
+    node_class_ids = [cid for cid in declared if cid not in edge_class_ids]
+
+    # Legend: one labelled box per class type actually present in the diagram.
+    legend: list[tuple[str, str, str]] = []  # (class id, label, style)
+    if declared:
+        legend.append(("LegendNodeClass", "Node class", _NODE_CLASS_STYLE))
+        if edge_class_ids:
+            legend.append(
+                ("LegendEdgeClass", "Edge (relationship) class", _EDGE_CLASS_STYLE)
+            )
+    if legend:
+        lines.append("  %% Legend")
+        lines += [f'  class {lid}["{label}"]' for lid, label, _ in legend]
+
+    # Styling: node classes light blue, edge classes orange (per-class `style`
+    # is the form that actually renders fills in classDiagram).
+    lines += [f"  style {cid} {_NODE_CLASS_STYLE}" for cid in node_class_ids]
+    lines += [f"  style {cid} {_EDGE_CLASS_STYLE}" for cid in edge_class_ids]
+    lines += [f"  style {lid} {style}" for lid, _, style in legend]
+
     if undrawn:
         lines.append("  %% Predicates without source/target metadata (not drawn):")
         lines += [f"  %%   - {p}" for p in undrawn]

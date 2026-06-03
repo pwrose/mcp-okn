@@ -133,10 +133,15 @@ def test_build_mermaid_diagram_edges_and_intermediary_classes():
     assert "float log2fc" in diagram
     assert "Sample --> MEASURED_EXPR" in diagram
     assert "MEASURED_EXPR --> Gene" in diagram
-    # The edge class is styled distinctly from node classes; node classes are not.
-    assert "style MEASURED_EXPR fill:" in diagram
-    assert "style Gene " not in diagram
-    assert "style Sample " not in diagram
+    # Node classes are light blue; the edge class is orange.
+    assert "style Gene fill:#BBDEFB" in diagram
+    assert "style Sample fill:#BBDEFB" in diagram
+    assert "style MEASURED_EXPR fill:#FFE0B2" in diagram
+    # A two-entry legend (node + edge) is included.
+    assert 'class LegendNodeClass["Node class"]' in diagram
+    assert 'class LegendEdgeClass["Edge (relationship) class"]' in diagram
+    assert "style LegendNodeClass fill:#BBDEFB" in diagram
+    assert "style LegendEdgeClass fill:#FFE0B2" in diagram
 
 
 def test_build_mermaid_diagram_lists_undrawn_predicates():
@@ -146,6 +151,9 @@ def test_build_mermaid_diagram_lists_undrawn_predicates():
     assert "class Person" in diagram
     assert "%%   - name" in diagram
     assert "-->" not in diagram  # no endpoints, so nothing is drawn as an edge
+    # No edge classes -> legend has the node entry only.
+    assert 'class LegendNodeClass["Node class"]' in diagram
+    assert "LegendEdgeClass" not in diagram
 
 
 def test_build_mermaid_diagram_probe_shape_classes_only():

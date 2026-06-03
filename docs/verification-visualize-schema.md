@@ -36,10 +36,11 @@ npx -y @mermaid-js/mermaid-cli -i spoke-genelab.mermaid -o spoke-genelab.png -s 
     wired `source --> edge --> target` — e.g.
     `MEASURED_DIFFERENTIAL_EXPRESSION_ASmMG` between `Assay` and `Gene`,
     `MEASURED_DIFFERENTIAL_ABUNDANCE_ASmO` → `Organism`,
-    `MEASURED_DIFFERENTIAL_METHYLATION_ASmMR` → `MethylationRegion`. These edge
-    classes are **colored distinctly** (orange) from node classes (lavender) via
-    a per-class `style` statement — the form that renders fills in
-    `classDiagram` (a `classDef` + `:::` assignment parses but emits no fill).
+    `MEASURED_DIFFERENTIAL_METHYLATION_ASmMR` → `MethylationRegion`. Node
+    (entity) classes are colored **light blue** and edge (relationship) classes
+    **orange**, with a **legend** showing both, via per-class `style` statements
+    — the form that renders fills in `classDiagram` (a `classDef` + `:::`
+    assignment parses but emits no fill).
   - **`direction TB`** yields the intended tall, top-down layout.
 
 ![Rendered spoke-genelab schema diagram](spoke-genelab-schema.png)

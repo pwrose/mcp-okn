@@ -184,6 +184,14 @@ and audited without the model re-supplying queries from memory.
   save the document directly — independent of how the model presents it, and
   transport-agnostic (works the same for a remote server). `reset_query_log`
   clears it along with the query/diagram log.
+- Because every query is stored verbatim, a saved transcript is **replayable**.
+  `scripts/replay_transcript.py` re-runs every query (from a `.md` or JSON
+  transcript) against the endpoint and checks each row count against the
+  recorded one:
+
+  ```bash
+  uv run python scripts/replay_transcript.py path/to/transcript.md
+  ```
 
 ## Development
 

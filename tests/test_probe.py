@@ -57,3 +57,13 @@ def test_namespace_query_extracts_obo_prefix_logic():
     # Sanity: the template references the grouping var and the alpha-prefix regex.
     assert "GROUP BY ?namespace" in _NAMESPACE_QUERY
     assert "[_:][A-Za-z0-9]*[0-9]" in _NAMESPACE_QUERY
+
+
+async def test_get_schema_surfaces_probe_namespaces_hint(monkeypatch):
+    async def fake_schema(shortname, compact=True):
+        return {"shortname": shortname, "schema": {"predicates": {"count": 1}}}
+
+    monkeypatch.setattr(srv.schema, "get_schema", fake_schema)
+    out = await srv.get_schema("nde")
+    assert "next_step" in out
+    assert "probe_namespaces" in out["next_step"]

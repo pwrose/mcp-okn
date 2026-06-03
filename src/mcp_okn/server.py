@@ -173,8 +173,24 @@ async def get_schema(shortname: str, compact: bool = True) -> dict[str, Any]:
         `node_properties` is a `{"columns", "data", "count"}` table;
         `edge_properties` maps relationship names to their properties and a
         `query_template` showing the RDF reification pattern to query them.
+        Also includes `next_step` reminding you to `probe_namespaces` for any
+        predicate whose objects are ontology terms before writing the query.
     """
-    return await schema.get_schema(shortname, compact=compact)
+    result = await schema.get_schema(shortname, compact=compact)
+    if isinstance(result, dict) and "schema" in result:
+        # Surface the value-space step at the point of decision: the model is
+        # holding the schema and about to write SPARQL, which is exactly when it
+        # tends to assume an ontology (DOID) instead of checking (MONDO).
+        result["next_step"] = (
+            "Before joining on a predicate whose objects are ontology terms "
+            "(diseases, chemicals, genes, anatomy), call "
+            f"probe_namespaces({shortname!r}, <predicate>) to see which identifier "
+            "scheme actually populates it (e.g. MONDO vs DOID vs NCIT) and how "
+            "many of each. Pick the richest namespace — do NOT infer the ontology "
+            "from the predicate or KG name, and do not give up if your first guess "
+            "has no hierarchy in ubergraph."
+        )
+    return result
 
 
 @mcp.tool()
@@ -334,6 +350,13 @@ async def sparql_query(
             ?d a up:Disease ; rdfs:seeAlso ?mondo .
           }
         }
+
+    BEFORE joining a target KG on an ontology term (the `<...MONDO_...>` IRIs
+    below), confirm which namespace that KG actually stores for the predicate by
+    calling `probe_namespaces(shortname, predicate)` first. KGs routinely carry
+    several ontologies for the same field (e.g. NDE's `schema:healthCondition`
+    holds MONDO, DOID, HP and NCIT), and picking the sparse one — or one with no
+    `subClassOf*` hierarchy in ubergraph — yields a fraction of the results.
 
     For category/subtype questions ("all cardiovascular diseases", "any asthma",
     "subtypes of X"), expand the category INLINE using ubergraph's precomputed

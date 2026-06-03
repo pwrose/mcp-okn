@@ -31,9 +31,13 @@ Workflow:
    then choose which one(s) are relevant to the question.
 2. Optionally call `describe_kg` for richer prose context on a chosen KG.
 3. Call `get_schema` for each chosen KG to learn its classes, predicates, and
-   property names BEFORE writing SPARQL — each KG has its own schema. This also
-   reveals which IDENTIFIER SCHEME / ontology the KG actually stores (e.g. DOID
-   vs MONDO, NCBI Gene vs Ensembl vs symbol). Do not assume — probe first.
+   property names BEFORE writing SPARQL — each KG has its own schema.
+3b. When a predicate's objects are ontology terms (diseases, chemicals, genes),
+   call `probe_namespaces(shortname, predicate)` to see which IDENTIFIER SCHEME /
+   ontology actually populates them (e.g. DOID vs MONDO, NCBI Gene vs Ensembl vs
+   symbol) and how many of each. Do NOT assume one ontology and give up when its
+   path is sparse — pick the richest namespace, and prefer one with a hierarchy
+   in ubergraph (MONDO/CHEBI/…) so you can expand categories via `subClassOf*`.
 4. Call `sparql_query` with a SPARQL query that scopes each KG with
    `GRAPH <https://purl.org/okn/frink/kg/{shortname}> { ... }`. A single query
    may span multiple named graphs (that is the point of federation).
@@ -213,6 +217,106 @@ async def visualize_schema(shortname: str) -> dict[str, Any]:
         # Pre-fenced form so the model can echo it verbatim without redrawing.
         result["mermaid_block"] = f"```mermaid\n{result['mermaid']}\n```"
     return result
+
+
+# Common non-OBO prefixes we can expand so a caller may pass a CURIE predicate
+# (e.g. `schema:healthCondition`) rather than the full IRI.
+_PREDICATE_PREFIXES = {
+    "schema": "http://schema.org/",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "dc": "http://purl.org/dc/elements/1.1/",
+    "dcterms": "http://purl.org/dc/terms/",
+    "owl": "http://www.w3.org/2002/07/owl#",
+}
+
+# Distribution of object namespaces for one predicate. For each object value we
+# take the local part (after the last `/` or `#`); if it looks like an ontology
+# CURIE/local id — an alpha prefix, then `_`/`:`, then an alphanumeric id that
+# contains a digit (`MONDO_0005240`, `MONDO:0005240`, `NCIT_C3137`) — we report
+# the prefix (`MONDO`, `NCIT`), otherwise we fall back to the base IRI namespace.
+# Requiring a digit in the id avoids splitting ordinary `foo_bar`-style locals.
+# Grouped + counted server-side so one query answers "which vocabularies
+# populate this edge".
+_NAMESPACE_QUERY = """\
+SELECT ?namespace (COUNT(*) AS ?count) WHERE {{
+  GRAPH <{ng}> {{ ?s <{pred}> ?o . }}
+  BIND(STR(?o) AS ?ostr)
+  BIND(REPLACE(?ostr, "^.*[/#]", "") AS ?local)
+  BIND(
+    IF(REGEX(?local, "^[A-Za-z][A-Za-z0-9]*[_:][A-Za-z0-9]*[0-9]"),
+       REPLACE(?local, "^([A-Za-z][A-Za-z0-9]*)[_:].*$", "$1"),
+       REPLACE(?ostr, "[^/#]*$", "")) AS ?namespace
+  )
+}}
+GROUP BY ?namespace
+ORDER BY DESC(?count)
+"""
+
+
+def _predicate_to_iri(predicate: str) -> str | None:
+    """Resolve a predicate (full IRI or known CURIE) to a full IRI, else None."""
+    p = predicate.strip().strip("<>")
+    if p.startswith(("http://", "https://")):
+        return normalize_schema_org(p)
+    prefix, sep, local = p.partition(":")
+    if sep and prefix in _PREDICATE_PREFIXES:
+        return _PREDICATE_PREFIXES[prefix] + local
+    expanded = _to_uri(p)  # OBO CURIE (e.g. MONDO:0005240) -> purl IRI
+    return expanded if expanded.startswith("http") else None
+
+
+@mcp.tool()
+async def probe_namespaces(shortname: str, predicate: str) -> dict[str, Any]:
+    """Report which identifier/ontology namespaces populate a predicate's objects.
+
+    Schema introspection (`get_schema`) tells you a KG's predicates but NOT which
+    controlled vocabularies fill their object values — so it's easy to assume a
+    single ontology (e.g. DOID) and miss a richer one (e.g. MONDO) that is also
+    present. Call this BEFORE writing the main query whenever a predicate's
+    objects are ontology terms (diseases, chemicals, genes, anatomy) to see the
+    actual namespace distribution and pick the best identifier to join on.
+
+    Args:
+        shortname: The KG shortname (e.g. `nde`), as returned by `list_kgs`.
+        predicate: The predicate whose objects to profile, as a full IRI or a
+            known CURIE (`schema:healthCondition`, `rdfs:seeAlso`, `MONDO:...`).
+            Get the exact predicate from `get_schema`.
+
+    Returns:
+        `{"shortname", "predicate", "namespaces": [{"namespace", "count"}, ...]
+        sorted by count desc, "total"}`. A `namespace` is an ontology prefix
+        (`MONDO`, `DOID`, `MeSH`) when objects are CURIE-style, else the base
+        IRI namespace. An OBO prefix (MONDO/DOID/HP/CHEBI/…) can then be joined
+        to ubergraph's `rdfs:subClassOf*` hierarchy for category expansion.
+
+    This is an exploratory probe — it is NOT recorded in the session/transcript.
+    """
+    iri = _predicate_to_iri(predicate)
+    if iri is None:
+        return {
+            "error": (
+                f"Could not resolve predicate {predicate!r}. Pass a full IRI, or "
+                f"a known CURIE ({', '.join(sorted(_PREDICATE_PREFIXES))}, or an "
+                f"OBO prefix like MONDO:). Get the predicate IRI from get_schema."
+            )
+        }
+    query = _NAMESPACE_QUERY.format(ng=named_graph(shortname), pred=iri)
+    try:
+        result = await run_sparql(query, fmt="json")
+    except SparqlError as exc:
+        return {"error": str(exc)}
+    namespaces = [
+        {"namespace": r.get("namespace"), "count": int(r.get("count", 0))}
+        for r in result.get("rows", [])
+    ]
+    return {
+        "shortname": shortname,
+        "predicate": iri,
+        "namespaces": namespaces,
+        "total": sum(n["count"] for n in namespaces),
+    }
 
 
 @mcp.tool()

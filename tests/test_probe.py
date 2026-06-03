@@ -1,0 +1,59 @@
+import mcp_okn.server as srv
+from mcp_okn.server import _predicate_to_iri, probe_namespaces, _NAMESPACE_QUERY
+
+
+def test_predicate_to_iri_resolves_curies_and_iris():
+    assert _predicate_to_iri("schema:healthCondition") == "http://schema.org/healthCondition"
+    # https schema.org is normalized to the http form the KGs store.
+    assert _predicate_to_iri("https://schema.org/about") == "http://schema.org/about"
+    assert _predicate_to_iri("rdfs:seeAlso") == "http://www.w3.org/2000/01/rdf-schema#seeAlso"
+    assert _predicate_to_iri("MONDO:0005240") == "http://purl.obolibrary.org/obo/MONDO_0005240"
+    assert _predicate_to_iri("<http://x.org/p>") == "http://x.org/p"
+    # Unknown bare CURIE can't be resolved.
+    assert _predicate_to_iri("foo:bar") is None
+
+
+async def test_probe_namespaces_aggregates_rows(monkeypatch):
+    captured = {}
+
+    async def fake_run(query, fmt="json", **kw):
+        captured["query"] = query
+        return {
+            "vars": ["namespace", "count"],
+            "rows": [
+                {"namespace": "MONDO", "count": 250611},
+                {"namespace": "DOID", "count": 20431},
+            ],
+            "row_count": 2,
+        }
+
+    monkeypatch.setattr(srv, "run_sparql", fake_run)
+    out = await probe_namespaces("nde", "schema:healthCondition")
+
+    assert out["shortname"] == "nde"
+    assert out["predicate"] == "http://schema.org/healthCondition"
+    assert out["namespaces"][0] == {"namespace": "MONDO", "count": 250611}
+    assert out["total"] == 271042
+    # Query is scoped to the KG's named graph and the resolved predicate IRI.
+    assert "https://purl.org/okn/frink/kg/nde" in captured["query"]
+    assert "http://schema.org/healthCondition" in captured["query"]
+
+
+async def test_probe_namespaces_rejects_unresolvable_predicate(monkeypatch):
+    called = False
+
+    async def fake_run(query, fmt="json", **kw):
+        nonlocal called
+        called = True
+        return {"vars": [], "rows": [], "row_count": 0}
+
+    monkeypatch.setattr(srv, "run_sparql", fake_run)
+    out = await probe_namespaces("nde", "foo:bar")
+    assert "error" in out
+    assert called is False  # never hits the endpoint
+
+
+def test_namespace_query_extracts_obo_prefix_logic():
+    # Sanity: the template references the grouping var and the alpha-prefix regex.
+    assert "GROUP BY ?namespace" in _NAMESPACE_QUERY
+    assert "[_:][A-Za-z0-9]*[0-9]" in _NAMESPACE_QUERY

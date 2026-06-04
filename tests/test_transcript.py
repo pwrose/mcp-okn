@@ -120,6 +120,26 @@ async def test_sparql_query_does_not_log_empty_result(monkeypatch):
     assert session.entries() == []
 
 
+async def test_sparql_query_hints_on_empty_result(monkeypatch):
+    import mcp_okn.server as srv
+
+    async def empty(query, fmt="json", **kw):
+        return {"vars": ["x"], "rows": [], "row_count": 0}
+
+    async def nonempty(query, fmt="json", **kw):
+        return {"vars": ["x"], "rows": [{"x": 1}], "row_count": 1}
+
+    monkeypatch.setattr(srv, "run_sparql", empty)
+    out = await srv.sparql_query("SELECT ?x {}")
+    assert "hint" in out
+    assert "probe_namespaces" in out["hint"] and "find_crosswalks" in out["hint"]
+
+    # Non-empty results carry no hint.
+    monkeypatch.setattr(srv, "run_sparql", nonempty)
+    out = await srv.sparql_query("SELECT ?x {}")
+    assert "hint" not in out
+
+
 async def test_include_query_log_false_omits_section():
     session.record(
         "SELECT * WHERE { GRAPH <https://purl.org/okn/frink/kg/prokn> {} }",

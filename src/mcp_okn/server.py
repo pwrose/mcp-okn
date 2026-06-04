@@ -38,6 +38,9 @@ Workflow:
    symbol) and how many of each. Do NOT assume one ontology and give up when its
    path is sparse — pick the richest namespace, and prefer one with a hierarchy
    in ubergraph (MONDO/CHEBI/…) so you can expand categories via `subClassOf*`.
+   If the ontology id you need isn't on an obvious predicate, call
+   `find_crosswalks(shortname)` — ids are often linked via `rdfs:seeAlso`,
+   `owl:sameAs`, or `skos:exactMatch`, which `get_schema` may omit or bury.
 4. Call `sparql_query` with a SPARQL query that scopes each KG with
    `GRAPH <https://purl.org/okn/frink/kg/{shortname}> { ... }`. A single query
    may span multiple named graphs (that is the point of federation).
@@ -188,7 +191,10 @@ async def get_schema(shortname: str, compact: bool = True) -> dict[str, Any]:
             "scheme actually populates it (e.g. MONDO vs DOID vs NCIT) and how "
             "many of each. Pick the richest namespace — do NOT infer the ontology "
             "from the predicate or KG name, and do not give up if your first guess "
-            "has no hierarchy in ubergraph."
+            f"has no hierarchy in ubergraph. If the id you need isn't on an obvious "
+            f"predicate, call find_crosswalks({shortname!r}): ontology ids are "
+            "often attached via rdfs:seeAlso / owl:sameAs / skos:exactMatch rather "
+            "than a domain predicate."
         )
     return result
 
@@ -355,6 +361,99 @@ async def probe_namespaces(
     }
 
 
+# Standard predicates that cross-reference external ontology / database ids.
+# These generic RDF/SKOS/OWL/schema.org terms are where ontology ids most often
+# hide — and being generic, a KG's curated schema either omits them or buries
+# them among hundreds of domain predicates, so they're easy to overlook.
+_CROSSWALK_PREDICATES = {
+    "rdfs:seeAlso": "http://www.w3.org/2000/01/rdf-schema#seeAlso",
+    "owl:sameAs": "http://www.w3.org/2002/07/owl#sameAs",
+    "schema:sameAs": "http://schema.org/sameAs",
+    "skos:exactMatch": "http://www.w3.org/2004/02/skos/core#exactMatch",
+    "skos:closeMatch": "http://www.w3.org/2004/02/skos/core#closeMatch",
+    "skos:relatedMatch": "http://www.w3.org/2004/02/skos/core#relatedMatch",
+    "skos:narrowMatch": "http://www.w3.org/2004/02/skos/core#narrowMatch",
+    "skos:broadMatch": "http://www.w3.org/2004/02/skos/core#broadMatch",
+}
+
+
+def _crosswalk_query(ng: str, sample: int = 0) -> str:
+    """Build a query profiling every crosswalk predicate's object namespaces.
+
+    One query over all mapping predicates (via ``VALUES``), grouped by predicate
+    and namespace. ``sample > 0`` caps objects with an inner ``LIMIT`` for KGs
+    where a mapping predicate (e.g. ``rdfs:seeAlso``) is very large.
+    """
+    values = " ".join(f"<{iri}>" for iri in _CROSSWALK_PREDICATES.values())
+    pattern = f"VALUES ?pred {{ {values} }}\n  GRAPH <{ng}> {{ ?s ?pred ?o . }}"
+    inner = pattern if sample <= 0 else f"{{ SELECT ?pred ?o WHERE {{ {pattern} }} LIMIT {sample} }}"
+    return (
+        "SELECT ?pred ?namespace (COUNT(*) AS ?count) WHERE {\n"
+        f"  {inner}\n"
+        f"{_NS_CLASSIFY}\n"
+        "}\n"
+        "GROUP BY ?pred ?namespace\n"
+        "ORDER BY DESC(?count)\n"
+    )
+
+
+@mcp.tool()
+async def find_crosswalks(shortname: str, sample: int = 0) -> dict[str, Any]:
+    """Find ontology/database ids reachable via standard crosswalk predicates.
+
+    Ontology ids (MONDO, CHEBI, NCBI Gene, …) are frequently attached NOT to a
+    domain predicate but to generic MAPPING predicates — `rdfs:seeAlso`,
+    `owl:sameAs`, `schema:sameAs`, and the SKOS `*Match` predicates. Because
+    they're generic, `get_schema` often omits them or buries them among hundreds
+    of predicates, so they're easy to miss when hunting for an ontology id. This
+    profiles ALL of them at once and reports, per predicate, the namespace
+    distribution of the linked ids — so you can see e.g. that a KG reaches MONDO
+    only via `skos:exactMatch`. Use it whenever a KG seems to lack the identifier
+    you need on its obvious predicates.
+
+    Args:
+        shortname: KG shortname (e.g. `prokn`), as returned by `list_kgs`.
+        sample: 0 (default) counts every linked object exactly; a positive N caps
+            objects via an inner `LIMIT` for KGs where a mapping predicate is very
+            large. Counts are then over the sample, not the graph.
+
+    Returns:
+        `{"shortname", "crosswalks": [{"predicate", "predicate_iri",
+        "namespaces": [{"namespace", "count"}, ...], "total"}, ...], "sampled"}`.
+        Only crosswalk predicates actually present in the KG are listed, busiest
+        first; within each, namespaces are sorted by count desc. An OBO prefix
+        (MONDO/CHEBI/…) can then be joined to ubergraph's `rdfs:subClassOf*`.
+
+    This is an exploratory probe — it is NOT recorded in the session/transcript.
+    """
+    iri_to_curie = {v: k for k, v in _CROSSWALK_PREDICATES.items()}
+    query = _crosswalk_query(named_graph(shortname), sample=sample)
+    try:
+        result = await run_sparql(query, fmt="json")
+    except SparqlError as exc:
+        return {"error": str(exc)}
+    by_pred: dict[str, list[dict[str, Any]]] = {}
+    for r in result.get("rows", []):
+        by_pred.setdefault(r.get("pred"), []).append(
+            {"namespace": r.get("namespace"), "count": int(r.get("count", 0))}
+        )
+    crosswalks = [
+        {
+            "predicate": iri_to_curie.get(pred, pred),
+            "predicate_iri": pred,
+            "namespaces": sorted(ns, key=lambda n: n["count"], reverse=True),
+            "total": sum(n["count"] for n in ns),
+        }
+        for pred, ns in by_pred.items()
+    ]
+    crosswalks.sort(key=lambda c: c["total"], reverse=True)
+    return {
+        "shortname": shortname,
+        "crosswalks": crosswalks,
+        "sampled": sample if sample > 0 else None,
+    }
+
+
 @mcp.tool()
 async def sparql_query(
     query: str, format: str = "json", exploratory: bool = False
@@ -405,6 +504,8 @@ async def sparql_query(
     Returns:
         For json: `{"vars": [...], "rows": [...], "row_count": N}`.
         For csv/tsv: `{"format": ..., "text": "..."}`.
+        A zero-row json result also carries a `hint` field — DON'T conclude the
+        data is absent; the join term's identifier scheme is the usual culprit.
 
     Note: The endpoint runs on a read-only filesystem, so queries needing a
     large external sort over a full-graph scan may fail; add a `LIMIT`, narrow
@@ -417,6 +518,19 @@ async def sparql_query(
         result = await run_sparql(query, fmt=format)
         if not exploratory:
             session.record(query, format, result=result)
+        # Rescue the common "got lost on an empty result" failure: an
+        # ontology-id join most often returns nothing because the predicate uses
+        # a different namespace than assumed, or the id is only reachable via a
+        # crosswalk predicate. Point at the diagnostics at the moment of need.
+        if isinstance(result, dict) and result.get("row_count") == 0:
+            result["hint"] = (
+                "0 rows — do NOT assume the data is absent. If you joined on an "
+                "ontology/identifier term, the predicate likely uses a different "
+                "namespace than you assumed (run probe_namespaces(kg, predicate) "
+                "to see which), or the id is reachable only via a crosswalk "
+                "predicate like rdfs:seeAlso / owl:sameAs / skos:exactMatch (run "
+                "find_crosswalks(kg)). Check, then retry — don't give up here."
+            )
         return result
     except SparqlError as exc:
         return {"error": str(exc)}

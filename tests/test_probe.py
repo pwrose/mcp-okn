@@ -1,5 +1,12 @@
 import mcp_okn.server as srv
-from mcp_okn.server import _predicate_to_iri, probe_namespaces, _namespace_query
+from mcp_okn.server import (
+    _predicate_to_iri,
+    probe_namespaces,
+    _namespace_query,
+    _crosswalk_query,
+    find_crosswalks,
+    _CROSSWALK_PREDICATES,
+)
 
 
 def test_predicate_to_iri_resolves_curies_and_iris():
@@ -94,3 +101,45 @@ async def test_get_schema_surfaces_probe_namespaces_hint(monkeypatch):
     out = await srv.get_schema("nde")
     assert "next_step" in out
     assert "probe_namespaces" in out["next_step"]
+    assert "find_crosswalks" in out["next_step"]
+
+
+def test_crosswalk_query_covers_mapping_predicates():
+    q = _crosswalk_query("NG")
+    # Every standard mapping predicate is offered via VALUES, grouped per pred.
+    for iri in _CROSSWALK_PREDICATES.values():
+        assert f"<{iri}>" in q
+    assert "VALUES ?pred" in q
+    assert "GROUP BY ?pred ?namespace" in q
+    assert "LIMIT" not in q
+    # Sampling caps via an inner subquery over (pred, o).
+    qs = _crosswalk_query("NG", sample=10000)
+    assert "LIMIT 10000" in qs
+    assert "SELECT ?pred ?o WHERE" in qs
+
+
+async def test_find_crosswalks_groups_by_predicate(monkeypatch):
+    see_also = _CROSSWALK_PREDICATES["rdfs:seeAlso"]
+    exact = _CROSSWALK_PREDICATES["skos:exactMatch"]
+
+    async def fake_run(query, fmt="json", **kw):
+        return {
+            "vars": ["pred", "namespace", "count"],
+            "rows": [
+                {"pred": see_also, "namespace": "PubChem", "count": 100},
+                {"pred": exact, "namespace": "MONDO", "count": 250},
+                {"pred": see_also, "namespace": "UniProt", "count": 40},
+            ],
+            "row_count": 3,
+        }
+
+    monkeypatch.setattr(srv, "run_sparql", fake_run)
+    out = await find_crosswalks("prokn")
+
+    # Busiest predicate first; CURIE label resolved; namespaces sorted desc.
+    assert [c["predicate"] for c in out["crosswalks"]] == ["skos:exactMatch", "rdfs:seeAlso"]
+    see = next(c for c in out["crosswalks"] if c["predicate"] == "rdfs:seeAlso")
+    assert see["predicate_iri"] == see_also
+    assert see["total"] == 140
+    assert see["namespaces"][0] == {"namespace": "PubChem", "count": 100}
+    assert out["sampled"] is None

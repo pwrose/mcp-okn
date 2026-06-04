@@ -437,13 +437,18 @@ async def find_crosswalks(shortname: str, sample: int = 0) -> dict[str, Any]:
 
     CROSS-KG BRIDGING: when a KG stores ids in an EXTERNAL IRI form that no
     ontology shares directly (e.g. ProKN's diseases as `https://www.omim.org/
-    entry/143100`), the bridge is usually `oboInOwl:hasDbXref` on the ontology
-    terms in `ubergraph`: MONDO/HP/CHEBI terms hold CURIE cross-refs there
-    (`OMIM:143100`, `UMLS:C...`, `MESH:D...`, `DOID:...`). Run
-    `find_crosswalks("ubergraph")` to see which db vocabularies MONDO xrefs, then
-    federate by matching the bare id — extract `143100` from the KG's OMIM IRI,
-    rebuild `"OMIM:143100"`, and join it to `?mondo oboInOwl:hasDbXref
-    "OMIM:143100"` in ubergraph (which also gives you the `subClassOf*` hierarchy).
+    entry/100100`), two bridges through `ubergraph` work:
+      1. `oboInOwl:hasDbXref` — MONDO/HP/CHEBI terms hold CURIE cross-refs
+         (`OMIM:100100`, `UMLS:C...`, `MESH:D...`). Extract the bare id from the
+         KG's IRI, rebuild the CURIE, and join `?mondo oboInOwl:hasDbXref
+         "OMIM:100100"`. PREFERRED — CURIEs sidestep IRI-form mismatches.
+      2. `skos:exactMatch` — MONDO terms link to OMIM as IRIs, BUT ubergraph uses
+         `https://omim.org/entry/100100` while ProKN uses `https://www.omim.org/
+         entry/100100` (note the missing `www.`). A direct join silently matches
+         nothing; rewrite at query time, e.g. `BIND(IRI(REPLACE(STR(?omim),
+         "://www\\.omim", "://omim")) AS ?ug_omim)`, then join on `?ug_omim`.
+    Either way ubergraph also gives you the `subClassOf*` hierarchy. Beware IRI-
+    form drift across graphs generally (subdomain, http/https, trailing slash).
 
     This is an exploratory probe — it is NOT recorded in the session/transcript.
     """
@@ -546,11 +551,14 @@ async def sparql_query(
         if isinstance(result, dict) and result.get("row_count") == 0:
             result["hint"] = (
                 "0 rows — do NOT assume the data is absent. If you joined on an "
-                "ontology/identifier term, the predicate likely uses a different "
-                "namespace than you assumed (run probe_namespaces(kg, predicate) "
-                "to see which), or the id is reachable only via a crosswalk "
-                "predicate like rdfs:seeAlso / owl:sameAs / skos:exactMatch (run "
-                "find_crosswalks(kg)). Check, then retry — don't give up here."
+                "ontology/identifier term, likely causes: (1) the predicate uses a "
+                "different namespace than you assumed — run probe_namespaces(kg, "
+                "predicate); (2) the id is reachable only via a crosswalk predicate "
+                "like rdfs:seeAlso / owl:sameAs / skos:exactMatch / "
+                "oboInOwl:hasDbXref — run find_crosswalks(kg); (3) the IRI FORM "
+                "differs across graphs (subdomain e.g. www.omim.org vs omim.org, "
+                "http vs https, trailing slash) so it silently matches nothing — "
+                "rewrite with BIND(IRI(REPLACE(...))). Check, then retry."
             )
         return result
     except SparqlError as exc:

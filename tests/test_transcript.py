@@ -96,6 +96,37 @@ async def test_transcript_renders_logged_queries_as_ground_truth():
     assert "| MONDO:0005240 | kidney cancer |" in md
 
 
+async def test_answer_text_rendered_verbatim_and_in_full():
+    """A turn's answer is reproduced byte-for-byte — the renderer never
+    truncates, summarizes, or escapes the model-supplied report prose. This is
+    the contract the docstring leans on when it tells the model to paste its
+    COMPLETE response (not a recap) into `answer`."""
+    answer = (
+        "## PFAS-associated cancers\n"
+        "\n"
+        "I queried `sawgraph` and found **two** cancers linked to PFAS exposure.\n"
+        "\n"
+        "| Disease | MONDO ID |\n"
+        "| --- | --- |\n"
+        "| kidney cancer | MONDO:0005240 |\n"
+        "| testicular cancer | MONDO:0005089 |\n"
+        "\n"
+        "Notes:\n"
+        "- Kidney cancer had the strongest signal (p < 0.01 & odds-ratio > 2).\n"
+        "- Pipes in data such as a|b are preserved as-is in prose.\n"
+        "- This paragraph runs long on purpose to prove nothing is clipped: "
+        + "detail " * 40
+        + "end."
+    )
+    md = await create_chat_transcript(
+        model="claude-opus-4-8",
+        exchanges=[{"prompt": "Which diseases relate to PFAS?", "answer": answer}],
+    )
+    # The entire answer appears as one contiguous, unmodified block — not a
+    # paraphrase, and with no per-character escaping of its markdown.
+    assert answer in md
+
+
 async def test_sparql_query_does_not_log_exploratory(monkeypatch):
     import mcp_okn.server as srv
 

@@ -295,6 +295,23 @@ def _namespace_query(ng: str, pred: str, sample: int = 0) -> str:
     )
 
 
+def _undercount_note(namespaces: list[dict[str, Any]]) -> str | None:
+    """Warn when objects span 2+ identifier namespaces, so a single-namespace
+    join (or only-direct-ontology-links) silently UNDERCOUNTS — the partial-result
+    failure that looks like success. None when there's only one namespace."""
+    names = [n["namespace"] for n in namespaces if n.get("namespace")]
+    if len(names) < 2:
+        return None
+    return (
+        f"Objects span {len(names)} identifier namespaces ({', '.join(names[:6])}"
+        f"{', …' if len(names) > 6 else ''}). Entities are SPLIT across them, so "
+        "joining on just one — or on only the direct ontology links — UNDERCOUNTS "
+        "and looks like a complete answer. To capture them all, UNION the "
+        "per-namespace joins, or bridge non-ontology ids to MONDO via ubergraph "
+        "(oboInOwl:hasDbXref / skos:exactMatch)."
+    )
+
+
 def _predicate_to_iri(predicate: str) -> str | None:
     """Resolve a predicate (full IRI or known CURIE) to a full IRI, else None."""
     p = predicate.strip().strip("<>")
@@ -364,6 +381,7 @@ async def probe_namespaces(
         "namespaces": namespaces,
         "total": sum(n["count"] for n in namespaces),
         "sampled": sample if sample > 0 else None,
+        "note": _undercount_note(namespaces),
     }
 
 
@@ -473,10 +491,18 @@ async def find_crosswalks(shortname: str, sample: int = 0) -> dict[str, Any]:
         for pred, ns in by_pred.items()
     ]
     crosswalks.sort(key=lambda c: c["total"], reverse=True)
+    # Flatten distinct namespaces across all crosswalk predicates for the note.
+    seen: dict[str, int] = {}
+    for c in crosswalks:
+        for n in c["namespaces"]:
+            if n["namespace"]:
+                seen[n["namespace"]] = seen.get(n["namespace"], 0) + n["count"]
+    flat = [{"namespace": k, "count": v} for k, v in seen.items()]
     return {
         "shortname": shortname,
         "crosswalks": crosswalks,
         "sampled": sample if sample > 0 else None,
+        "note": _undercount_note(flat),
     }
 
 

@@ -5,8 +5,23 @@ from mcp_okn.server import (
     _namespace_query,
     _crosswalk_query,
     find_crosswalks,
+    _undercount_note,
     _CROSSWALK_PREDICATES,
 )
+
+
+def test_undercount_note_fires_only_for_multiple_namespaces():
+    assert _undercount_note([{"namespace": "MONDO", "count": 10}]) is None
+    assert _undercount_note([]) is None
+    # Empty-string namespaces don't count toward the multi-namespace trigger.
+    assert _undercount_note(
+        [{"namespace": "MONDO", "count": 10}, {"namespace": "", "count": 3}]
+    ) is None
+    note = _undercount_note(
+        [{"namespace": "OMIM", "count": 14936}, {"namespace": "MONDO", "count": 7811}]
+    )
+    assert note is not None
+    assert "UNDERCOUNTS" in note and "OMIM" in note and "MONDO" in note
 
 
 def test_predicate_to_iri_resolves_curies_and_iris():
@@ -47,6 +62,8 @@ async def test_probe_namespaces_aggregates_rows(monkeypatch):
     # Default run is an exact full scan.
     assert out["sampled"] is None
     assert "LIMIT" not in captured["query"]
+    # Two namespaces (MONDO, DOID) -> undercount note is surfaced.
+    assert out["note"] is not None and "UNDERCOUNTS" in out["note"]
 
 
 async def test_probe_namespaces_passes_sample_through(monkeypatch):

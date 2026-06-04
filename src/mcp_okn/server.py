@@ -51,7 +51,11 @@ can pass `exploratory=True` to `sparql_query` to keep schema-probing or
 trial-and-error queries out of the record. Call `reset_query_log` at the START of
 an analysis to scope the log, and `create_chat_transcript` at the END to emit a
 reproducible markdown record (prompts, answers, and the verbatim queries +
-results that actually produced findings). SAVE the full transcript markdown the
+results that actually produced findings). For each turn's `answer`, paste your
+COMPLETE response text as the user saw it — the full report, findings, tables,
+and explanation — NOT a condensed recap. The server only logs tool calls, never
+your prose, so a summarized `answer` is lost detail that cannot be recovered.
+SAVE the full transcript markdown the
 tool returns — verbatim and complete — as a downloadable `.md` file via your
 file-creation capability (the same behavior as "save the transcript as a file":
 the `.md` appears in the preview panel, downloadable from the chat); a Markdown
@@ -701,13 +705,18 @@ async def create_chat_transcript(
     `include_query_log` is true) rendered here as ground truth — you do NOT need
     to re-supply them. Call `reset_query_log` at the start of an analysis to
     scope the log to that session. You still supply the prompts and your
-    narrative answers via `exchanges`.
+    full answer text (verbatim, not summarized) via `exchanges`.
 
     Args:
         model: The model version that produced the analysis
             (e.g. `claude-opus-4-8`). Use the exact model ID.
         exchanges: The conversation turns, in order. Each is a dict with
-            `prompt` (str) and optional `answer` (str). You may also attach an
+            `prompt` (str) and optional `answer` (str). The `answer` MUST be your
+            full response for that turn, reproduced verbatim as the user saw it —
+            the complete report text, findings, and any inline tables or lists —
+            NOT a high-level summary or paraphrase. The server cannot see your
+            prose (only tool calls are logged), so whatever you omit here is gone
+            from the transcript. Err toward including too much. You may also attach an
             explicit `queries` list per turn (same shape as the log entries) if
             you want queries shown inline with a specific prompt instead of —
             or in addition to — the auto-logged appendix. Attach ONLY queries

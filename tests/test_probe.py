@@ -109,6 +109,9 @@ def test_crosswalk_query_covers_mapping_predicates():
     # Every standard mapping predicate is offered via VALUES, grouped per pred.
     for iri in _CROSSWALK_PREDICATES.values():
         assert f"<{iri}>" in q
+    # The OBO db-xref bridge (OMIM/UMLS/MESH -> MONDO in ubergraph) is included.
+    assert "oboInOwl:hasDbXref" in _CROSSWALK_PREDICATES
+    assert "<http://www.geneontology.org/formats/oboInOwl#hasDbXref>" in q
     assert "VALUES ?pred" in q
     assert "GROUP BY ?pred ?namespace" in q
     assert "LIMIT" not in q

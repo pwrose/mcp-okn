@@ -253,19 +253,25 @@ _PREDICATE_PREFIXES = {
     "owl": "http://www.w3.org/2002/07/owl#",
 }
 
-# Per-object namespace classification, applied inside the GROUP BY below. We
-# take the local part (after the last `/` or `#`); if it looks like an ontology
-# CURIE/local id — an alpha prefix, then `_`/`:`, then an alphanumeric id that
-# contains a digit (`MONDO_0005240`, `MONDO:0005240`, `NCIT_C3137`) — we report
-# the prefix (`MONDO`, `NCIT`), otherwise we fall back to the base IRI namespace.
-# Requiring a digit in the id avoids splitting ordinary `foo_bar`-style locals.
+# Per-object namespace classification, applied inside the GROUP BY below.
+#  * Literal objects (e.g. `oboInOwl:hasDbXref` values like `OMIM:143100`,
+#    `GC_ID:1`, `GOC:TermGenie`) are CURIE strings: report the prefix before the
+#    first `:` (`OMIM`, `GC_ID`, `GOC`), else the whole literal.
+#  * IRI objects: take the local part (after the last `/`/`#`); if it looks like
+#    an ontology id — alpha prefix, `_`/`:`, then an alphanumeric id containing a
+#    digit (`MONDO_0005240`, `NCIT_C3137`) — report the prefix, else fall back to
+#    the base IRI namespace. Requiring a digit avoids splitting `foo_bar` locals.
 _NS_CLASSIFY = """\
   BIND(STR(?o) AS ?ostr)
   BIND(REPLACE(?ostr, "^.*[/#]", "") AS ?local)
   BIND(
-    IF(REGEX(?local, "^[A-Za-z][A-Za-z0-9]*[_:][A-Za-z0-9]*[0-9]"),
-       REPLACE(?local, "^([A-Za-z][A-Za-z0-9]*)[_:].*$", "$1"),
-       REPLACE(?ostr, "[^/#]*$", "")) AS ?namespace
+    IF(isLiteral(?o),
+       IF(REGEX(?ostr, "^[A-Za-z][A-Za-z0-9_.]*:"),
+          REPLACE(?ostr, "^([A-Za-z][A-Za-z0-9_.]*):.*$", "$1"),
+          ?ostr),
+       IF(REGEX(?local, "^[A-Za-z][A-Za-z0-9]*[_:][A-Za-z0-9]*[0-9]"),
+          REPLACE(?local, "^([A-Za-z][A-Za-z0-9]*)[_:].*$", "$1"),
+          REPLACE(?ostr, "[^/#]*$", ""))) AS ?namespace
   )"""
 
 
@@ -365,6 +371,10 @@ async def probe_namespaces(
 # These generic RDF/SKOS/OWL/schema.org terms are where ontology ids most often
 # hide — and being generic, a KG's curated schema either omits them or buries
 # them among hundreds of domain predicates, so they're easy to overlook.
+# `oboInOwl:hasDbXref` is the key OBO bridge: ubergraph's MONDO/HP/CHEBI terms
+# carry CURIE-form cross-refs there (OMIM:143100, UMLS:C0020179, MESH:D006816,
+# DOID:12858, …), so it links an ontology term to the many db ids a target KG
+# might store in IRI form (e.g. ProKN's `https://www.omim.org/entry/143100`).
 _CROSSWALK_PREDICATES = {
     "rdfs:seeAlso": "http://www.w3.org/2000/01/rdf-schema#seeAlso",
     "owl:sameAs": "http://www.w3.org/2002/07/owl#sameAs",
@@ -374,6 +384,7 @@ _CROSSWALK_PREDICATES = {
     "skos:relatedMatch": "http://www.w3.org/2004/02/skos/core#relatedMatch",
     "skos:narrowMatch": "http://www.w3.org/2004/02/skos/core#narrowMatch",
     "skos:broadMatch": "http://www.w3.org/2004/02/skos/core#broadMatch",
+    "oboInOwl:hasDbXref": "http://www.geneontology.org/formats/oboInOwl#hasDbXref",
 }
 
 
@@ -423,6 +434,16 @@ async def find_crosswalks(shortname: str, sample: int = 0) -> dict[str, Any]:
         Only crosswalk predicates actually present in the KG are listed, busiest
         first; within each, namespaces are sorted by count desc. An OBO prefix
         (MONDO/CHEBI/…) can then be joined to ubergraph's `rdfs:subClassOf*`.
+
+    CROSS-KG BRIDGING: when a KG stores ids in an EXTERNAL IRI form that no
+    ontology shares directly (e.g. ProKN's diseases as `https://www.omim.org/
+    entry/143100`), the bridge is usually `oboInOwl:hasDbXref` on the ontology
+    terms in `ubergraph`: MONDO/HP/CHEBI terms hold CURIE cross-refs there
+    (`OMIM:143100`, `UMLS:C...`, `MESH:D...`, `DOID:...`). Run
+    `find_crosswalks("ubergraph")` to see which db vocabularies MONDO xrefs, then
+    federate by matching the bare id — extract `143100` from the KG's OMIM IRI,
+    rebuild `"OMIM:143100"`, and join it to `?mondo oboInOwl:hasDbXref
+    "OMIM:143100"` in ubergraph (which also gives you the `subClassOf*` hierarchy).
 
     This is an exploratory probe — it is NOT recorded in the session/transcript.
     """

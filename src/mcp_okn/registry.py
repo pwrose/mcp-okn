@@ -198,3 +198,19 @@ async def fetch_kg_doc(
 
     _doc_cache[shortname] = resp.text
     return resp.text
+
+
+async def fetch_kg_long_description(
+    shortname: str, client: httpx.AsyncClient | None = None, refresh: bool = False
+) -> str:
+    """Return a KG's free-text description: the markdown body after the YAML.
+
+    Each registry entry carries a ~150-word prose description below its
+    frontmatter — richer than the one-line ``description`` field exposed by
+    ``list_kgs``. Useful for disambiguating which KG a question targets when the
+    short descriptions aren't enough. Returns an empty string if the entry has no
+    body. Reuses the document cache populated by :func:`fetch_kg_doc`.
+    """
+    doc = await fetch_kg_doc(shortname, client=client, refresh=refresh)
+    _front, body = _split_frontmatter(doc)
+    return body

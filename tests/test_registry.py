@@ -1,3 +1,4 @@
+from mcp_okn import registry
 from mcp_okn.registry import _split_frontmatter, _meta_from_front
 
 SAMPLE = """\
@@ -35,3 +36,30 @@ def test_split_frontmatter_no_fence():
     front, body = _split_frontmatter("just text, no frontmatter")
     assert front == {}
     assert body == "just text, no frontmatter"
+
+
+async def test_fetch_kg_long_description_returns_body(monkeypatch):
+    async def fake_doc(shortname, client=None, refresh=False):
+        assert shortname == "prokn"
+        return SAMPLE
+
+    monkeypatch.setattr(registry, "fetch_kg_doc", fake_doc)
+    body = await registry.fetch_kg_long_description("prokn")
+    # The free-text prose, not the YAML frontmatter.
+    assert body.startswith("The Protein Knowledge Network")
+    assert "shortname:" not in body
+
+
+async def test_describe_kg_long_description_returns_only_prose(monkeypatch):
+    from mcp_okn import server
+
+    async def fake_doc(shortname, client=None, refresh=False):
+        return SAMPLE
+
+    monkeypatch.setattr(registry, "fetch_kg_doc", fake_doc)
+    full = await server.describe_kg("prokn")
+    prose = await server.describe_kg("prokn", long_description=True)
+    # Full keeps the frontmatter; the long_description option strips it.
+    assert "shortname: prokn" in full
+    assert "shortname:" not in prose
+    assert prose.startswith("The Protein Knowledge Network")

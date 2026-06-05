@@ -3,6 +3,9 @@ name = "mcp-okn"
 version = "0.1.0"
 description = "MCP server for querying the FRINK federated SPARQL endpoint over Proto-OKN knowledge graphs"
 readme = "README.md"
+authors = [
+    { name = "Peter W. Rose", email = "pwrose.ucsd@gmail.com" },
+]
 requires-python = ">=3.10"
 dependencies = [
     "mcp>=1.2.0",

@@ -1,0 +1,4 @@
+# Generated, live-data-dependent caches/outputs — reproducible from the endpoint.
+# (dataset.jsonl IS committed; reference results and run dumps are not.)
+reference_results.json
+results.json

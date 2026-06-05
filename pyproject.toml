@@ -31,6 +31,12 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
 ]
+# Layer-2 (Claude agent) of the registry benchmark. The dataset build and
+# layer-1 smoke need nothing beyond the core deps; only the agent needs this.
+# Install with `uv sync --group benchmark` (and set ANTHROPIC_API_KEY).
+benchmark = [
+    "anthropic>=0.39",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

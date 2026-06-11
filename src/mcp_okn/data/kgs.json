@@ -1,9 +1,9 @@
 [
   {
     "shortname": "bio101",
-    "title": "bio101",
-    "description": "",
-    "homepage": null,
+    "title": "KB Bio 101",
+    "description": "A knowledge base created from an introductory biology textbook",
+    "homepage": "https://www.ai.sri.com/~halo/public/exported-kb/biokb.html",
     "named_graph": "https://purl.org/okn/frink/kg/bio101"
   },
   {
@@ -85,9 +85,9 @@
   },
   {
     "shortname": "fiokg",
-    "title": "fiokg",
-    "description": "",
-    "homepage": null,
+    "title": "SAWGraph FRS KG",
+    "description": "The FRS (Facility Registry Service) KG is the part of the SAWGraph project that stores data about facilities from EPA's Facility Registry service (FRS) together with their NAICS industry classification and the spatial location.",
+    "homepage": "https://sawgraph.github.io/",
     "named_graph": "https://purl.org/okn/frink/kg/fiokg"
   },
   {
@@ -204,9 +204,9 @@
   },
   {
     "shortname": "sawgraph",
-    "title": "sawgraph",
-    "description": "",
-    "homepage": null,
+    "title": "SAWGraph PFAS KG",
+    "description": "The Safe Agricultural Products and Water Graph (SAWGraph) PFAS KG stores data on PFAS observations and releases, describing the samples, the geospatial features they were taken from, the sampled environmental media, the specific chemical substances and the measurement values observed.",
+    "homepage": "https://sawgraph.github.io/",
     "named_graph": "https://purl.org/okn/frink/kg/sawgraph"
   },
   {

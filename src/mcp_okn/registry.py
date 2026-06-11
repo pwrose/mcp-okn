@@ -64,12 +64,27 @@ def _split_frontmatter(markdown: str) -> tuple[dict[str, Any], str]:
     if markdown.startswith("---"):
         parts = markdown.split("---", 2)
         if len(parts) == 3:
-            try:
-                front = yaml.safe_load(parts[1]) or {}
-            except yaml.YAMLError:
-                front = {}
+            front = _safe_load_yaml(parts[1])
             return (front if isinstance(front, dict) else {}, parts[2].strip())
     return {}, markdown.strip()
+
+
+def _safe_load_yaml(text: str) -> dict[str, Any]:
+    """Parse YAML frontmatter, tolerating stray trailing whitespace.
+
+    Some registry entries carry trailing tabs/spaces after a value (e.g. a tab
+    after a contact email), which YAML rejects with a scanner error. A raw tab
+    never carries meaning in these flat key-value blocks, so on failure we retry
+    with each line right-stripped before giving up.
+    """
+    for candidate in (text, "\n".join(line.rstrip() for line in text.splitlines())):
+        try:
+            front = yaml.safe_load(candidate) or {}
+        except yaml.YAMLError:
+            continue
+        if isinstance(front, dict):
+            return front
+    return {}
 
 
 def _meta_from_front(shortname: str, front: dict[str, Any]) -> dict[str, Any]:

@@ -4,6 +4,8 @@ from mcp_okn.server import (
     probe_namespaces,
     _namespace_query,
     _crosswalk_query,
+    _ontology_id_query,
+    _NODE_ID_IRI_PREFIXES,
     find_crosswalks,
     _undercount_note,
     _CROSSWALK_PREDICATES,
@@ -138,11 +140,67 @@ def test_crosswalk_query_covers_mapping_predicates():
     assert "SELECT ?pred ?o WHERE" in qs
 
 
+# Route a fake run_sparql to one of the three scans find_crosswalks fires.
+def _scan_of(query: str) -> str:
+    if "VALUES ?pred" in query:
+        return "crosswalk"
+    if "?n ?pred ?x" in query:
+        return "subject"
+    if "?x ?pred ?n" in query:
+        return "object"
+    raise AssertionError(f"unrecognized scan query: {query[:80]}")
+
+
+def test_ontology_id_query_scans_one_role_per_query():
+    subj = _ontology_id_query("NG", "subject")
+    obj = _ontology_id_query("NG", "object")
+    # Each query scans exactly its own role's triple position.
+    assert "?n ?pred ?x" in subj and "?x ?pred ?n" not in subj
+    assert "?x ?pred ?n" in obj and "?n ?pred ?x" not in obj
+    # No UNION: the two roles are separate requests so one can't time out the
+    # other; each groups per (pred, ns) and counts distinct join keys.
+    assert "UNION" not in subj
+    assert "GROUP BY ?pred ?namespace" in subj
+    assert "COUNT(DISTINCT ?n)" in subj
+    # Only id-bearing IRI namespaces are scanned, pushed down as a prefilter.
+    for prefix in _NODE_ID_IRI_PREFIXES:
+        assert f'STRSTARTS(STR(?n), "{prefix}")' in subj
+    assert "http://purl.obolibrary.org/obo/" in _NODE_ID_IRI_PREFIXES
+    assert "LIMIT" not in subj  # exact full scan by default
+
+
+def test_ontology_id_query_sample_filters_inside_limit():
+    # Sampling must cap ALREADY-FILTERED id triples, else a graph whose first N
+    # triples are non-id (reified associations) profiles as empty. The id filter
+    # therefore lives inside the LIMIT subquery.
+    q = _ontology_id_query("NG", "object", sample=5000)
+    assert q.count("LIMIT 5000") == 1
+    subquery_prefix = q.index("SELECT ?n ?pred WHERE")
+    assert "STRSTARTS(STR(?n)" in q[subquery_prefix : subquery_prefix + 400]
+
+
 async def test_find_crosswalks_groups_by_predicate(monkeypatch):
     see_also = _CROSSWALK_PREDICATES["rdfs:seeAlso"]
     exact = _CROSSWALK_PREDICATES["skos:exactMatch"]
 
     async def fake_run(query, fmt="json", **kw):
+        scan = _scan_of(query)
+        if scan == "subject":
+            return {  # MONDO under two predicates: collapses to one row, count=max.
+                "vars": ["pred", "namespace", "count"],
+                "rows": [
+                    {"pred": "http://ex/type", "namespace": "MONDO", "count": 5000},
+                    {"pred": "http://ex/label", "namespace": "MONDO", "count": 4000},
+                ],
+                "row_count": 2,
+            }
+        if scan == "object":
+            return {
+                "vars": ["pred", "namespace", "count"],
+                "rows": [{"pred": "http://ex/hasPhenotype",
+                          "namespace": "HP", "count": 12}],
+                "row_count": 1,
+            }
         return {
             "vars": ["pred", "namespace", "count"],
             "rows": [
@@ -163,3 +221,91 @@ async def test_find_crosswalks_groups_by_predicate(monkeypatch):
     assert see["total"] == 140
     assert see["namespaces"][0] == {"namespace": "PubChem", "count": 100}
     assert out["sampled"] is None
+    # Node-IRI / domain-predicate scan surfaced separately, busiest first; the
+    # two MONDO rows collapse to one (count=max), predicates listed busiest-first.
+    assert [o["namespace"] for o in out["ontology_ids"]] == ["MONDO", "HP"]
+    mondo = out["ontology_ids"][0]
+    assert mondo["role"] == "subject"
+    assert mondo["count"] == 5000
+    assert mondo["predicates"] == ["http://ex/type", "http://ex/label"]
+    assert out["ontology_ids"][1]["role"] == "object"
+
+
+async def test_find_crosswalks_node_iris_when_no_mapping_predicates(monkeypatch):
+    # The rdkg case: no mapping predicates, but diseases ARE obo/MONDO_ IRIs.
+    async def fake_run(query, fmt="json", **kw):
+        if _scan_of(query) == "subject":
+            return {
+                "vars": ["pred", "namespace", "count"],
+                "rows": [{"pred": "http://ex/type",
+                          "namespace": "MONDO", "count": 8000}],
+                "row_count": 1,
+            }
+        return {"vars": ["pred", "namespace", "count"], "rows": [], "row_count": 0}
+
+    monkeypatch.setattr(srv, "run_sparql", fake_run)
+    out = await find_crosswalks("rdkg")
+
+    assert out["crosswalks"] == []
+    assert out["ontology_ids"][0] == {
+        "role": "subject",
+        "namespace": "MONDO",
+        "count": 8000,
+        "predicates": ["http://ex/type"],
+    }
+    # Note must steer toward a DIRECT node-IRI join, not report "empty".
+    assert "directly" in out["note"].lower()
+    assert "MONDO" in out["note"]
+
+
+async def test_find_crosswalks_object_role_survives_subject_timeout(monkeypatch):
+    # The biobricks-ice case: ids only as OBJECTS (CHEMINF). The fruitless subject
+    # scan times out, but the productive object scan must still come through.
+    from mcp_okn.server import SparqlError
+
+    async def fake_run(query, fmt="json", **kw):
+        scan = _scan_of(query)
+        if scan == "subject":
+            raise SparqlError("subject scan timed out")
+        if scan == "object":
+            return {
+                "vars": ["pred", "namespace", "count"],
+                "rows": [{"pred": "http://ex/has_role",
+                          "namespace": "CHEMINF", "count": 311}],
+                "row_count": 1,
+            }
+        return {"vars": ["pred", "namespace", "count"], "rows": [], "row_count": 0}
+
+    monkeypatch.setattr(srv, "run_sparql", fake_run)
+    out = await find_crosswalks("biobricks-ice", sample=80000)
+    # Object-role ids survive the subject scan's timeout.
+    assert [o["namespace"] for o in out["ontology_ids"]] == ["CHEMINF"]
+    assert out["ontology_ids"][0]["role"] == "object"
+    # …but the partial-scan caveat is still raised, with a smaller retry sample.
+    assert "INCOMPLETE" in out["note"]
+    assert "sample=40000" in out["note"]
+
+
+async def test_find_crosswalks_degrades_when_node_scans_fail(monkeypatch):
+    from mcp_okn.server import SparqlError
+
+    async def fake_run(query, fmt="json", **kw):
+        if _scan_of(query) in ("subject", "object"):
+            raise SparqlError("node scan timed out")
+        return {
+            "vars": ["pred", "namespace", "count"],
+            "rows": [{"pred": _CROSSWALK_PREDICATES["skos:exactMatch"],
+                      "namespace": "MONDO", "count": 9}],
+            "row_count": 1,
+        }
+
+    monkeypatch.setattr(srv, "run_sparql", fake_run)
+    out = await find_crosswalks("prokn", sample=100000)
+    # Crosswalks still returned even though both node-IRI scans errored.
+    assert out["crosswalks"][0]["namespaces"][0]["namespace"] == "MONDO"
+    assert out["ontology_ids"] == []
+    assert "error" not in out
+    # The note must flag the incomplete scan and suggest a smaller retry sample.
+    assert "INCOMPLETE" in out["note"]
+    assert "sample=50000" in out["note"]
+    assert "sample=50000" in out["note"]

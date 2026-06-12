@@ -92,7 +92,8 @@ async def run_sparql(
 
     Raises:
         SparqlError: If the endpoint reports a query error (including the
-            read-only-filesystem error QLever raises for large external sorts).
+            read-only-filesystem error QLever raises for large external sorts) or
+            the request times out — a scan too broad to finish in ``timeout``s.
     """
     if fmt not in _ACCEPT:
         raise ValueError(f"Unsupported format {fmt!r}; use one of {sorted(_ACCEPT)}")
@@ -108,6 +109,14 @@ async def run_sparql(
         resp = await client.post(
             FEDERATION_ENDPOINT, data=data, headers=headers, timeout=timeout
         )
+    except httpx.TimeoutException as exc:
+        # Surface as SparqlError so callers degrade uniformly instead of crashing
+        # on a raw httpx traceback. A timeout means the scan was too broad to
+        # finish in time — narrow it (e.g. add a `sample`/`LIMIT`).
+        raise SparqlError(
+            f"SPARQL request timed out after {timeout}s — the query scanned too "
+            f"much; narrow it with a sample/LIMIT.\nQuery:\n{query}"
+        ) from exc
     finally:
         if owns_client:
             await client.aclose()

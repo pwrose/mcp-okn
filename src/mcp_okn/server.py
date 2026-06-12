@@ -8,12 +8,14 @@ the registry are never used.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from datetime import date as _date
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from . import crosswalks as crosswalk_table
 from . import registry, schema, session
 from .sparql import (
     FEDERATION_ENDPOINT,
@@ -41,6 +43,13 @@ Workflow:
    If the ontology id you need isn't on an obvious predicate, call
    `find_crosswalks(shortname)` — ids are often linked via `rdfs:seeAlso`,
    `owl:sameAs`, or `skos:exactMatch`, which `get_schema` may omit or bury.
+3c. When the question spans TWO KGs, call `get_join_strategy(kg_a, kg_b)` FIRST,
+   before `find_crosswalks`. It returns a precomputed, hand-verified join recipe
+   (predicates, roles, shared id, the `iri_normalization` rewrite to apply, and a
+   verified count) — fast and reliable, where `find_crosswalks` scans live and
+   often times out. Respect its answer: `known_non_join` means that pair was
+   checked and does NOT join on the obvious key — do not retry it; only on
+   `unknown` should you fall back to `find_crosswalks` to discover a key live.
 4. Call `sparql_query` with a SPARQL query that scopes each KG with
    `GRAPH <https://purl.org/okn/frink/kg/{shortname}> { ... }`. A single query
    may span multiple named graphs (that is the point of federation).
@@ -268,26 +277,36 @@ _PREDICATE_PREFIXES = {
     "owl": "http://www.w3.org/2002/07/owl#",
 }
 
-# Per-object namespace classification, applied inside the GROUP BY below.
-#  * Literal objects (e.g. `oboInOwl:hasDbXref` values like `OMIM:143100`,
+# Per-term namespace classification, applied inside the GROUP BY below.
+#  * Literal terms (e.g. `oboInOwl:hasDbXref` values like `OMIM:143100`,
 #    `GC_ID:1`, `GOC:TermGenie`) are CURIE strings: report the prefix before the
 #    first `:` (`OMIM`, `GC_ID`, `GOC`), else the whole literal.
-#  * IRI objects: take the local part (after the last `/`/`#`); if it looks like
+#  * IRI terms: take the local part (after the last `/`/`#`); if it looks like
 #    an ontology id — alpha prefix, `_`/`:`, then an alphanumeric id containing a
 #    digit (`MONDO_0005240`, `NCIT_C3137`) — report the prefix, else fall back to
 #    the base IRI namespace. Requiring a digit avoids splitting `foo_bar` locals.
-_NS_CLASSIFY = """\
-  BIND(STR(?o) AS ?ostr)
-  BIND(REPLACE(?ostr, "^.*[/#]", "") AS ?local)
+def _ns_classify(var: str = "o") -> str:
+    """BIND block classifying ?<var> into ?namespace (an ontology/CURIE prefix or
+    base IRI namespace). Parameterized on the term variable so the same logic
+    profiles a predicate's OBJECTS (?o) or an arbitrary NODE IRI (?n) — the latter
+    needed when an id is encoded as the node itself, not via a mapping predicate.
+    """
+    s, loc = f"{var}str", f"{var}local"
+    return f"""\
+  BIND(STR(?{var}) AS ?{s})
+  BIND(REPLACE(?{s}, "^.*[/#]", "") AS ?{loc})
   BIND(
-    IF(isLiteral(?o),
-       IF(REGEX(?ostr, "^[A-Za-z][A-Za-z0-9_.]*:"),
-          REPLACE(?ostr, "^([A-Za-z][A-Za-z0-9_.]*):.*$", "$1"),
-          ?ostr),
-       IF(REGEX(?local, "^[A-Za-z][A-Za-z0-9]*[_:][A-Za-z0-9]*[0-9]"),
-          REPLACE(?local, "^([A-Za-z][A-Za-z0-9]*)[_:].*$", "$1"),
-          REPLACE(?ostr, "[^/#]*$", ""))) AS ?namespace
+    IF(isLiteral(?{var}),
+       IF(REGEX(?{s}, "^[A-Za-z][A-Za-z0-9_.]*:"),
+          REPLACE(?{s}, "^([A-Za-z][A-Za-z0-9_.]*):.*$", "$1"),
+          ?{s}),
+       IF(REGEX(?{loc}, "^[A-Za-z][A-Za-z0-9]*[_:][A-Za-z0-9]*[0-9]"),
+          REPLACE(?{loc}, "^([A-Za-z][A-Za-z0-9]*)[_:].*$", "$1"),
+          REPLACE(?{s}, "[^/#]*$", ""))) AS ?namespace
   )"""
+
+
+_NS_CLASSIFY = _ns_classify("o")
 
 
 def _namespace_query(ng: str, pred: str, sample: int = 0) -> str:
@@ -325,6 +344,44 @@ def _undercount_note(namespaces: list[dict[str, Any]]) -> str | None:
         "per-namespace joins, or bridge non-ontology ids to MONDO via ubergraph "
         "(oboInOwl:hasDbXref / skos:exactMatch)."
     )
+
+
+def _crosswalk_note(
+    crosswalks: list[dict[str, Any]],
+    ontology_ids: list[dict[str, Any]],
+    flat: list[dict[str, Any]],
+    node_scan_failed: bool = False,
+    sample: int = 0,
+) -> str | None:
+    """Compose the find_crosswalks note. Leads with the headline that ids exist
+    only as node IRIs / domain objects when no mapping predicate carries them
+    (the case that used to read as empty), then any incomplete-scan warning, then
+    the cross-namespace undercount warning. None when nothing noteworthy."""
+    parts: list[str] = []
+    if node_scan_failed:
+        retry = max(sample // 2, 20000) if sample > 0 else 100000
+        parts.append(
+            "The node-IRI / domain-predicate scan timed out, so `ontology_ids` is "
+            f"INCOMPLETE — this KG is large. Retry with sample={retry} (or smaller) "
+            "to profile a representative slice."
+        )
+    subj = [o for o in ontology_ids if o.get("role") == "subject"]
+    if subj and not crosswalks:
+        ns = ", ".join(dict.fromkeys(o["namespace"] for o in subj if o["namespace"]))
+        parts.append(
+            f"No mapping predicates, but this KG's OWN nodes are ontology IRIs "
+            f"({ns}) — there is nothing to 'cross-walk': join another graph "
+            "DIRECTLY on the node IRI (?s already equals the ontology term)."
+        )
+    elif ontology_ids and not crosswalks:
+        parts.append(
+            "No mapping predicates, but ontology ids ARE present (see "
+            "`ontology_ids`) on domain predicates / node IRIs — join on those."
+        )
+    undercount = _undercount_note(flat)
+    if undercount:
+        parts.append(undercount)
+    return " ".join(parts) or None
 
 
 def _predicate_to_iri(predicate: str) -> str | None:
@@ -441,32 +498,105 @@ def _crosswalk_query(ng: str, sample: int = 0) -> str:
     )
 
 
+# Id-bearing IRI namespaces a node can live in DIRECTLY — not via a mapping
+# predicate. OBO purl terms cover the case where a KG's entities ARE ontology
+# IRIs (rdkg's diseases are `obo/MONDO_…`); identifiers.org covers database ids
+# in IRI form (NCBI Gene, Ensembl, …). A `STRSTARTS` prefilter lets the store
+# skip every non-id triple, keeping the all-predicate scan tractable.
+_NODE_ID_IRI_PREFIXES = (
+    "http://purl.obolibrary.org/obo/",
+    "http://identifiers.org/",
+    "https://identifiers.org/",
+)
+
+
+def _ontology_id_query(ng: str, role: str, sample: int = 0) -> str:
+    """Build a query finding ids encoded AS node IRIs or domain-predicate objects.
+
+    The mapping-predicate scan (`_crosswalk_query`) is blind to ids that aren't
+    hung off `rdfs:seeAlso` / `skos:exactMatch` / … — namely ids baked into the
+    node IRI itself (rdkg's diseases are `obo/MONDO_…` IRIs) or carried by an
+    arbitrary DOMAIN predicate. This scans the triples whose ``role`` end
+    (``subject`` or ``object``) is an id-bearing IRI, classifies its namespace,
+    and groups by ``(predicate, namespace)`` — surfacing the join key regardless
+    of which predicate (if any) it rides on. The predicate is incidental for a
+    node-IRI (subject) join — you join on the IRI itself — but names the edge for
+    a domain-predicate (object) join; `find_crosswalks` collapses the
+    per-predicate rows back to one row per namespace. Counts are ``DISTINCT``
+    nodes — i.e. how many join keys exist. ``sample > 0`` caps the scan via an
+    inner ``LIMIT``.
+
+    The two roles are deliberately SEPARATE queries (run concurrently by
+    `find_crosswalks`): a KG often has ids in only one position, so the other
+    role's scan finds nothing and, on a large KG, runs the store to a timeout —
+    splitting them means that fruitless scan can't take the productive one down
+    with it. Grouping is kept explicit per predicate rather than via
+    ``GROUP_CONCAT``, which the FRINK federation engine leaves unbound.
+    """
+    triple = "?n ?pred ?x ." if role == "subject" else "?x ?pred ?n ."
+    prefixes = " || ".join(
+        f'STRSTARTS(STR(?n), "{p}")' for p in _NODE_ID_IRI_PREFIXES
+    )
+    # The id-bearing FILTER lives INSIDE the scan so that, when sampling, the
+    # LIMIT caps already-filtered id triples — not arbitrary triples that may all
+    # be filtered away (oard-kg's first rows are reified-association nodes, so a
+    # filter-after-LIMIT scan finds nothing). `?n` is the id node in either role.
+    body = f"GRAPH <{ng}> {{ {triple} }} FILTER(isIRI(?n)) FILTER({prefixes})"
+    if sample > 0:
+        body = f"{{ SELECT ?n ?pred WHERE {{ {body} }} LIMIT {sample} }}"
+    return (
+        "SELECT ?pred ?namespace (COUNT(DISTINCT ?n) AS ?count) WHERE {\n"
+        f"  {body}\n"
+        f"{_ns_classify('n')}\n"
+        "}\n"
+        "GROUP BY ?pred ?namespace\n"
+        "ORDER BY DESC(?count)\n"
+    )
+
+
 @mcp.tool()
 async def find_crosswalks(shortname: str, sample: int = 0) -> dict[str, Any]:
-    """Find ontology/database ids reachable via standard crosswalk predicates.
+    """Find ontology/database ids in a KG, however they are encoded.
 
-    Ontology ids (MONDO, CHEBI, NCBI Gene, …) are frequently attached NOT to a
-    domain predicate but to generic MAPPING predicates — `rdfs:seeAlso`,
-    `owl:sameAs`, `schema:sameAs`, and the SKOS `*Match` predicates. Because
-    they're generic, `get_schema` often omits them or buries them among hundreds
-    of predicates, so they're easy to miss when hunting for an ontology id. This
-    profiles ALL of them at once and reports, per predicate, the namespace
-    distribution of the linked ids — so you can see e.g. that a KG reaches MONDO
-    only via `skos:exactMatch`. Use it whenever a KG seems to lack the identifier
-    you need on its obvious predicates.
+    Ontology ids (MONDO, CHEBI, NCBI Gene, …) hide in THREE places, and a KG that
+    "lacks" the id you need usually just encodes it somewhere non-obvious. This
+    profiles all three at once:
+
+    1. MAPPING predicates — `rdfs:seeAlso`, `owl:sameAs`, `schema:sameAs`, the
+       SKOS `*Match` predicates, `oboInOwl:hasDbXref`. Generic, so `get_schema`
+       often omits them or buries them among hundreds of predicates. Returned
+       under `crosswalks`, per predicate.
+    2. NODE IRIs — the entity's OWN IRI is the ontology term (rdkg's diseases ARE
+       `obo/MONDO_…` IRIs; ids may also be `identifiers.org/…`). No mapping
+       predicate exists; you join DIRECTLY on the node IRI. Returned under
+       `ontology_ids` with `role="subject"`.
+    3. DOMAIN predicates — the id is the object of an arbitrary, KG-specific
+       predicate (not one of the mapping set). Returned under `ontology_ids`
+       with `role="object"` and the carrying predicate.
+
+    Cases 2 and 3 are invisible to a mapping-predicate-only scan — they are
+    exactly why `find_crosswalks` used to return empty for KGs (rdkg, oard-kg,
+    biobricks-ice, biomarkerkg) that in fact carry rich ontology ids. Use this
+    whenever a KG seems to lack the identifier you need on its obvious predicates.
 
     Args:
         shortname: KG shortname (e.g. `prokn`), as returned by `list_kgs`.
-        sample: 0 (default) counts every linked object exactly; a positive N caps
-            objects via an inner `LIMIT` for KGs where a mapping predicate is very
+        sample: 0 (default) counts exactly; a positive N caps each scan via an
+            inner `LIMIT` for KGs where a predicate or the node-IRI scan is very
             large. Counts are then over the sample, not the graph.
 
     Returns:
-        `{"shortname", "crosswalks": [{"predicate", "predicate_iri",
-        "namespaces": [{"namespace", "count"}, ...], "total"}, ...], "sampled"}`.
-        Only crosswalk predicates actually present in the KG are listed, busiest
-        first; within each, namespaces are sorted by count desc. An OBO prefix
-        (MONDO/CHEBI/…) can then be joined to ubergraph's `rdfs:subClassOf*`.
+        `{"shortname", "crosswalks": [{"predicate", "predicate_iri", "namespaces":
+        [{"namespace", "count"}, ...], "total"}, ...], "ontology_ids": [{"role",
+        "namespace", "count", "predicates": [...]}, ...], "sampled"}`.
+        `crosswalks` lists mapping predicates (busiest first; namespaces by count
+        desc). `ontology_ids` lists ids encoded as node IRIs (`role="subject"`) or
+        as domain-predicate objects (`role="object"`), one row per id family,
+        busiest first; `count` is DISTINCT ids — i.e. how many join keys — and
+        `predicates` are the edges they ride on. Any OBO prefix (MONDO/CHEBI/…) can
+        be joined to ubergraph's `rdfs:subClassOf*`. When `ontology_ids` shows a
+        `subject`-role namespace, the join is direct: the KG's nodes ARE those
+        IRIs, so `?s` already equals the ontology term in the other graph.
 
     CROSS-KG BRIDGING: when a KG stores ids in an EXTERNAL IRI form that no
     ontology shares directly (e.g. ProKN's diseases as `https://www.omim.org/
@@ -486,38 +616,191 @@ async def find_crosswalks(shortname: str, sample: int = 0) -> dict[str, Any]:
     This is an exploratory probe — it is NOT recorded in the session/transcript.
     """
     iri_to_curie = {v: k for k, v in _CROSSWALK_PREDICATES.items()}
-    query = _crosswalk_query(named_graph(shortname), sample=sample)
-    try:
-        result = await run_sparql(query, fmt="json")
-    except SparqlError as exc:
-        return {"error": str(exc)}
-    by_pred: dict[str, list[dict[str, Any]]] = {}
-    for r in result.get("rows", []):
-        by_pred.setdefault(r.get("pred"), []).append(
-            {"namespace": r.get("namespace"), "count": int(r.get("count", 0))}
+    ng = named_graph(shortname)
+    # Three independent scans run concurrently: mapping predicates, plus id-bearing
+    # node IRIs in the SUBJECT and OBJECT positions (separate so a fruitless scan
+    # of one role can't time out the other). Each degrades on its own — a slow
+    # node scan never hides the crosswalks, nor one role the other.
+    map_res, subj_res, obj_res = await asyncio.gather(
+        run_sparql(_crosswalk_query(ng, sample=sample), fmt="json"),
+        run_sparql(_ontology_id_query(ng, "subject", sample=sample), fmt="json"),
+        run_sparql(_ontology_id_query(ng, "object", sample=sample), fmt="json"),
+        return_exceptions=True,
+    )
+    # Surface only SparqlError as a soft error; let unexpected exceptions bubble.
+    for res in (map_res, subj_res, obj_res):
+        if isinstance(res, Exception) and not isinstance(res, SparqlError):
+            raise res
+    if all(isinstance(r, SparqlError) for r in (map_res, subj_res, obj_res)):
+        return {"error": str(map_res)}
+
+    crosswalks: list[dict[str, Any]] = []
+    if not isinstance(map_res, Exception):
+        by_pred: dict[str, list[dict[str, Any]]] = {}
+        for r in map_res.get("rows", []):
+            by_pred.setdefault(r.get("pred"), []).append(
+                {"namespace": r.get("namespace"), "count": int(r.get("count", 0))}
+            )
+        crosswalks = [
+            {
+                "predicate": iri_to_curie.get(pred, pred),
+                "predicate_iri": pred,
+                "namespaces": sorted(ns, key=lambda n: n["count"], reverse=True),
+                "total": sum(n["count"] for n in ns),
+            }
+            for pred, ns in by_pred.items()
+        ]
+        crosswalks.sort(key=lambda c: c["total"], reverse=True)
+
+    # Collapse each role's per-(predicate, namespace) rows to one row per
+    # namespace. The same id appears under several predicates, so distinct counts
+    # can't be summed — take the max (a node carrying every predicate is counted
+    # once) and list the carrying predicates, busiest first (the edge to join on
+    # for an object-role id).
+    ontology_ids: list[dict[str, Any]] = []
+    for role, res in (("subject", subj_res), ("object", obj_res)):
+        if isinstance(res, Exception):
+            continue
+        by_ns: dict[str, dict[str, Any]] = {}
+        for r in res.get("rows", []):
+            ns = r.get("namespace")
+            cnt = int(r.get("count", 0))
+            pred = iri_to_curie.get(r.get("pred"), r.get("pred"))
+            entry = by_ns.setdefault(
+                ns, {"role": role, "namespace": ns, "count": 0, "_preds": {}}
+            )
+            entry["count"] = max(entry["count"], cnt)
+            if pred:
+                entry["_preds"][pred] = max(entry["_preds"].get(pred, 0), cnt)
+        ontology_ids.extend(
+            {
+                "role": e["role"],
+                "namespace": e["namespace"],
+                "count": e["count"],
+                "predicates": sorted(e["_preds"], key=e["_preds"].get, reverse=True),
+            }
+            for e in by_ns.values()
         )
-    crosswalks = [
-        {
-            "predicate": iri_to_curie.get(pred, pred),
-            "predicate_iri": pred,
-            "namespaces": sorted(ns, key=lambda n: n["count"], reverse=True),
-            "total": sum(n["count"] for n in ns),
-        }
-        for pred, ns in by_pred.items()
-    ]
-    crosswalks.sort(key=lambda c: c["total"], reverse=True)
-    # Flatten distinct namespaces across all crosswalk predicates for the note.
+    ontology_ids.sort(key=lambda o: o["count"], reverse=True)
+
+    # Flatten distinct namespaces across BOTH scans for the undercount note.
     seen: dict[str, int] = {}
     for c in crosswalks:
         for n in c["namespaces"]:
             if n["namespace"]:
                 seen[n["namespace"]] = seen.get(n["namespace"], 0) + n["count"]
+    for o in ontology_ids:
+        if o["namespace"]:
+            seen[o["namespace"]] = seen.get(o["namespace"], 0) + o["count"]
     flat = [{"namespace": k, "count": v} for k, v in seen.items()]
+    note = _crosswalk_note(
+        crosswalks,
+        ontology_ids,
+        flat,
+        node_scan_failed=isinstance(subj_res, SparqlError)
+        or isinstance(obj_res, SparqlError),
+        sample=sample,
+    )
+    # Point at the verified precomputed table when it covers this KG — those join
+    # recipes are reliable where this live scan is not.
+    precomputed = crosswalk_table.verified_for(shortname)
+    if precomputed:
+        hint = (
+            f"{len(precomputed)} VERIFIED precomputed join(s) exist for "
+            f"'{shortname}' — call `get_join_strategy('{shortname}')` for "
+            "ready-to-use recipes instead of relying on this live scan."
+        )
+        note = f"{hint} {note}" if note else hint
     return {
         "shortname": shortname,
         "crosswalks": crosswalks,
+        "ontology_ids": ontology_ids,
         "sampled": sample if sample > 0 else None,
-        "note": _undercount_note(flat),
+        "note": note,
+    }
+
+
+@mcp.tool()
+async def get_join_strategy(kg_a: str, kg_b: str | None = None) -> dict[str, Any]:
+    """Look up a PRECOMPUTED, verified recipe for joining two KGs.
+
+    Call this FIRST whenever a question spans two graphs — BEFORE `find_crosswalks`
+    and before writing any federated join query. `find_crosswalks` discovers join
+    keys live and frequently times out on large graphs; this serves a curated,
+    hand-verified table (exact `COUNT(DISTINCT)` over the named graphs on
+    `verified_on`) instead, so it is fast and reliable. It tells you not just THAT
+    two KGs join but exactly HOW: the predicates and roles on each side, the shared
+    identifier and its namespace, any bridge graph, and — critically — the
+    `iri_normalization` snippet (the `REPLACE`/`CONCAT` rewrite to apply at query
+    time, since the same id often appears in 2-3 IRI forms and a naive join
+    silently returns nothing).
+
+    Args:
+        kg_a: a KG shortname (as from `list_kgs`).
+        kg_b: optional second shortname. Omit to list everything `kg_a` can join.
+
+    Returns (kg_b given) one of:
+      * `{"status": "verified", "joins": [recipe, ...]}` — apply the recipe.
+        Each recipe carries `left_kg/right_kg`, `left_predicate/right_predicate`
+        (`"node-iri"` means the id IS the entity's own IRI — join directly on it),
+        `left_role/right_role`, `shared_key`, `key_namespace`, `bridge_kg`,
+        `iri_normalization`, `verified_count`, and `example_question`.
+      * `{"status": "known_non_join", "non_joins": [...]}` — this pair was CHECKED
+        and does not join on the obvious key. Do NOT attempt it; read `diagnosis`.
+      * `{"status": "unknown", ...}` — nothing precomputed. Fall back to
+        `find_crosswalks(kg_a)` / `find_crosswalks(kg_b)` to discover a key live.
+    Returns (kg_b omitted) `{"shortname", "joins": [...], "island": {...}|None,
+    "known_non_joins": [...]}` — every verified join touching `kg_a`.
+
+    `island`/`known_non_join` context is included whenever present so you can tell
+    apart "not yet profiled" from "verified to share no key". `verified_on` dates
+    every answer so staleness is visible.
+    """
+    verified_on = crosswalk_table.verified_on()
+    if kg_b is None:
+        return {
+            "shortname": kg_a,
+            "verified_on": verified_on,
+            "joins": crosswalk_table.verified_for(kg_a),
+            "island": crosswalk_table.island_status(kg_a),
+            "known_non_joins": crosswalk_table.nonjoin_for(kg_a),
+        }
+
+    joins = crosswalk_table.join_between(kg_a, kg_b)
+    if joins:
+        return {"status": "verified", "verified_on": verified_on, "joins": joins}
+
+    non_joins = crosswalk_table.nonjoin_between(kg_a, kg_b)
+    if non_joins:
+        return {
+            "status": "known_non_join",
+            "verified_on": verified_on,
+            "non_joins": non_joins,
+            "note": (
+                "This pair was verified to NOT join on the attempted key — do not "
+                "retry it. See each `diagnosis`."
+            ),
+        }
+
+    islands = [
+        s for s in (kg_a, kg_b) if crosswalk_table.island_status(s) is not None
+    ]
+    island_ctx = {s: crosswalk_table.island_status(s) for s in islands}
+    note = (
+        "No precomputed crosswalk for this pair. Fall back to "
+        f"`find_crosswalks('{kg_a}')` and `find_crosswalks('{kg_b}')` to discover a "
+        "shared id live, then join on it."
+    )
+    if islands:
+        note += (
+            f" NOTE: {', '.join(islands)} is a profiled island / thin-thread KG "
+            "(scarce public join keys) — see `island` for what little it exposes."
+        )
+    return {
+        "status": "unknown",
+        "verified_on": verified_on,
+        "note": note,
+        "island": island_ctx or None,
     }
 
 

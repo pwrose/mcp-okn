@@ -107,13 +107,50 @@ def _ordered_kgs(entry: dict[str, Any]) -> list[str]:
     return [kg for kg in ordered if kg]
 
 
+# Group each crosswalk into a domain by its shared identifier, so the listing
+# renders as a table organised by domain. Keep this in sync with the table's
+# shared_key vocabulary (a test asserts every key is mapped).
+_DOMAIN_BY_SHARED_KEY: dict[str, str] = {
+    "DOID": "Disease & phenotype",
+    "MONDO": "Disease & phenotype",
+    "HP": "Disease & phenotype",
+    "DOID<->MONDO": "Disease & phenotype",
+    "MONDO<->OMIM (bridged)": "Disease & phenotype",
+    "MeSH_descriptor_id": "Disease & phenotype",
+    "Ensembl": "Genes",
+    "Entrez": "Genes",
+    "HGNC -> Entrez (bridged)": "Genes",
+    "UniProt": "Proteins",
+    "CAS": "Chemicals",
+    "CHEBI<->CAS": "Chemicals",
+    "PubChem CID": "Chemicals",
+    "NCBITaxon": "Taxonomy",
+    "S2_L13": "Geospatial",
+    "county_FIPS": "Geospatial",
+    "state_FIPS": "Geospatial",
+    "KWG_county": "Geospatial",
+    "ZIP5": "Geospatial",
+    "NAICS": "Industry & supply chain",
+    "SUDOKN_industry_sector": "Industry & supply chain",
+}
+
+
+def domain_for(shared_key: str | None) -> str:
+    """The domain a crosswalk belongs to, keyed by its shared identifier."""
+    return _DOMAIN_BY_SHARED_KEY.get(shared_key or "", "Other")
+
+
 def all_crosswalks(include_examples: bool = True) -> list[dict[str, Any]]:
     """Compact summary of every verified cross-KG integration point.
 
-    One row per verified crosswalk: the KGs it connects in join order
-    (left → bridge → right, by official registry shortname), the shared
-    identifier, the bridge KG if any, and the verified row count.
-    ``example_question`` is included unless ``include_examples`` is False.
+    One row per verified crosswalk: its ``domain`` (e.g. "Genes", "Geospatial"),
+    the KGs it connects in join order (left → bridge → right, by official registry
+    shortname), the shared identifier, the bridge KG if any, and the verified row
+    count. ``example_question`` is included unless ``include_examples`` is False.
+
+    Rows are sorted by ``(domain, shared_key, kgs)`` so the result reads as a
+    table grouped by domain and ordered by ontology within each — ready to render
+    directly.
 
     The internal table ``id`` is deliberately omitted: it embeds KG abbreviations
     (e.g. ``M2-mesh-spokeokn``) that are NOT official shortnames, so a listing
@@ -123,6 +160,7 @@ def all_crosswalks(include_examples: bool = True) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for e in load_crosswalks().get("verified_crosswalks", []):
         row = {
+            "domain": domain_for(e.get("shared_key")),
             "kgs": _ordered_kgs(e),
             "shared_key": e.get("shared_key"),
             "bridge_kg": e.get("bridge_kg"),
@@ -131,6 +169,7 @@ def all_crosswalks(include_examples: bool = True) -> list[dict[str, Any]]:
         if include_examples:
             row["example_question"] = e.get("example_question")
         rows.append(row)
+    rows.sort(key=lambda r: (r["domain"], r["shared_key"] or "", r["kgs"]))
     return rows
 
 

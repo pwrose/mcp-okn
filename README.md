@@ -23,8 +23,8 @@ SPARQL queries scoped to one or more named graphs of the form
 | `visualize_schema(shortname)` | Deterministic Mermaid `classDiagram` of a KG's schema, built server-side from `get_schema` — class boxes, labeled edges, and edge-property predicates as intermediary classes with typed fields (node classes light blue, edge classes orange, with a legend). When the curated metadata names predicates but not their endpoints, edges are recovered from the graph's `rdfs:domain`/`rdfs:range` scoped to the curated classes. Returns `mermaid_block` (already wrapped in a ` ```mermaid ` fence) — output it **verbatim**; don't redraw it as SVG/an image. Rendered examples: [spoke-genelab](docs/spoke-genelab-schema.png), [dreamkg](docs/dreamkg-schema.png), [rdkg](docs/rdkg-schema.png) ([details](docs/verification-visualize-schema.md)). |
 | `sparql_query(query, format="json", exploratory=False)` | Run a SPARQL query on the federation endpoint. Substantive results are logged for the transcript unless `exploratory=True`. `https://schema.org/` URIs are normalized to the canonical `http://schema.org/` form the KGs store, so either scheme matches. |
 | `expand_ontology_term(term, relation="subClassOf", direction="descendants", include_self=True, limit=1000)` | Expand an ontology term to its full subtree/closure via the `ubergraph` graph. |
-| `get_join_strategy(kg_a, kg_b=None)` | Look up a precomputed, hand-verified recipe for joining two KGs — predicates, roles, shared identifier, bridge graph, IRI-normalization snippet, and verified count. Call **before** writing a federated join. Returns `verified` / `known_non_join` / `unknown`; with `kg_b` omitted, lists every join touching `kg_a`. |
-| `list_crosswalks(include_examples=True)` | List **every** verified cross-KG integration point in one call — a global map of which graphs connect and on what shared key. Each row is a compact summary (connected `kgs` by official shortname, `shared_key`, `bridge_kg`, `verified_count`, and an `example_question` by default; set `include_examples=False` for a terser list). Use `get_join_strategy(kg_a, kg_b)` for a single pair's full recipe. |
+| `get_join_strategy(kg_a, kg_b=None)` | Look up a precomputed, hand-verified recipe for joining two KGs — predicates, roles, shared identifier, bridge graph, verified count, and a runnable `skeleton_query` (the example SPARQL to copy and build on; it already encodes the IRI rewrites). Call **before** writing a federated join. Returns `verified` / `known_non_join` / `unknown`; with `kg_b` omitted, lists every join touching `kg_a`. |
+| `list_crosswalks(include_examples=True)` | List **every** verified cross-KG integration point in one call — a global map of which graphs connect and on what shared key. Rows are grouped by `domain` (Genes, Geospatial, Disease & phenotype, …) and sorted by ontology, ready to render as a table. Each row is a compact summary (`domain`, connected `kgs` in join order by official shortname, `shared_key`, `bridge_kg`, `verified_count`, and an `example_question` by default; set `include_examples=False` for a terser list). Use `get_join_strategy(kg_a, kg_b)` for a single pair's full recipe. |
 | `reset_query_log()` | Clear the session query log. Call at the **start** of an analysis to scope a transcript. |
 | `get_query_log()` | Return the queries logged so far this session (only those that returned rows and weren't exploratory). |
 | `create_chat_transcript(model, exchanges, ...)` | Emit a reproducible markdown (or JSON) record of a session — prompts, answers, the verbatim queries + results that produced findings, and any `visualize_schema` diagrams. Call at the **end** of an analysis. |
@@ -147,6 +147,36 @@ GRAPH <https://purl.org/okn/frink/kg/ubergraph> {
   ?mondo rdfs:subClassOf+ <http://purl.obolibrary.org/obo/MONDO_0003847> .
 }
 ```
+
+### Cross-graph join through a bridge
+
+Some graphs share no identifier directly but meet through a **bridge** graph.
+For example, **OARD-KG** keys diseases on MONDO while **ProKN** annotates them
+with OMIM; they join through `ubergraph`'s MONDO→OMIM cross-references. Ask
+`get_join_strategy("oard-kg", "prokn")` for the verified skeleton — it returns
+this runnable query (347 MONDO diseases / 348 OMIM ids, verified):
+
+```sparql
+SELECT DISTINCT ?mondo ?omim WHERE {
+  GRAPH <https://purl.org/okn/frink/kg/oard-kg> {            # MONDO diseases
+    ?assoc <https://w3id.org/biolink/vocab/object> ?mondo .
+    FILTER(STRSTARTS(STR(?mondo), "http://purl.obolibrary.org/obo/MONDO_"))
+  }
+  GRAPH <https://purl.org/okn/frink/kg/ubergraph> {          # bridge: MONDO → OMIM
+    ?mondo <http://www.geneontology.org/formats/oboInOwl#hasDbXref> ?curie .
+    FILTER(STRSTARTS(STR(?curie), "OMIM:"))
+  }
+  # ubergraph stores OMIM:{id} CURIEs; ProKN stores https://www.omim.org/entry/{id} IRIs
+  BIND(IRI(CONCAT("https://www.omim.org/entry/", REPLACE(STR(?curie), "^OMIM:", ""))) AS ?omim)
+  GRAPH <https://purl.org/okn/frink/kg/prokn> {              # OMIM on rdfs:seeAlso
+    ?d <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?omim .
+  }
+}
+```
+
+The `BIND` rebuild is the crux: a naive `OMIM:…` ↔ `omim.org/entry/…` join
+silently returns nothing. Every verified crosswalk ships such a runnable
+skeleton — see `get_join_strategy` / `list_crosswalks` above.
 
 ## Reproducible transcripts
 

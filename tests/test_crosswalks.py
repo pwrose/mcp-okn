@@ -111,6 +111,19 @@ async def test_list_crosswalks_uses_official_kg_shortnames():
 
 
 @pytest.mark.asyncio
+async def test_list_crosswalks_grouped_by_domain_and_sorted():
+    """Rows carry a domain and are sorted by (domain, shared_key) so the listing
+    renders as a table grouped by domain. Every shared_key must map to a real
+    domain (not the "Other" fallback), so new keys force a mapping update."""
+    out = await list_crosswalks()
+    rows = out["crosswalks"]
+    assert all(r.get("domain") for r in rows)
+    assert all(r["domain"] != "Other" for r in rows), "unmapped shared_key domain"
+    keys = [(r["domain"], r["shared_key"] or "", r["kgs"]) for r in rows]
+    assert keys == sorted(keys), "rows not sorted by (domain, shared_key, kgs)"
+
+
+@pytest.mark.asyncio
 async def test_list_crosswalks_orders_bridge_in_the_middle():
     """For a bridged join the bridge KG sits between the two endpoints, not at an
     alphabetical end (e.g. oard-kg → ubergraph → prokn, not → prokn → ubergraph)."""

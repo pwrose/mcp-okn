@@ -826,12 +826,14 @@ async def list_crosswalks(include_examples: bool = True) -> dict[str, Any]:
             more compact listing.
 
     Returns:
-        `{"verified_on", "count", "crosswalks": [{"kgs", "shared_key",
-        "bridge_kg", "verified_count", "example_question"?}, ...]}`. `kgs` is the
-        sorted set of every KG the join touches (endpoints, bridge, and clique
-        members), each an official registry shortname usable directly with
-        `describe_kg`/`get_schema`/`query`. `verified_on` dates the counts so
-        staleness is visible.
+        `{"verified_on", "count", "crosswalks": [{"domain", "kgs", "shared_key",
+        "bridge_kg", "verified_count", "example_question"?}, ...]}`. Rows are
+        sorted by `(domain, shared_key)`, so the list reads as a table grouped by
+        `domain` (e.g. "Genes", "Geospatial", "Disease & phenotype") and ordered
+        by ontology within each — render it directly as such. `kgs` lists every
+        KG the join touches in join order (left → bridge → right), each an
+        official registry shortname usable directly with
+        `describe_kg`/`get_schema`/`query`. `verified_on` dates the counts.
     """
     rows = crosswalk_table.all_crosswalks(include_examples=include_examples)
     return {

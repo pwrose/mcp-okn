@@ -1153,8 +1153,9 @@ async def create_chat_transcript(
         include_query_log: If true (default), append the auto-logged queries
             as a "SPARQL queries executed" section.
         include_intermediate_rows: If false (default), only the FINAL logged
-            query renders its result rows; earlier (intermediate) queries show
-            their SPARQL and row count but omit the result table, to keep the
+            query renders its full result table; earlier (intermediate) queries
+            show their SPARQL, row count, and a compact PREVIEW of the rows (a
+            single-row result in full, otherwise the first 3 rows), to keep the
             transcript focused on the queries that produced the findings. Set
             true to render the full result rows for every logged query.
             (Queries attached inline to an exchange via `queries` always render
@@ -1359,8 +1360,10 @@ def _render_query(
 ) -> list[str]:
     """Render one query (verbatim text + results or error) as markdown lines.
 
-    When ``show_results`` is False, the result rows are omitted and replaced by a
-    one-line row-count note — used for intermediate queries in the log appendix.
+    When ``show_results`` is False, only a compact PREVIEW of the rows is shown
+    (a single-row result in full, otherwise the first 3 rows) instead of the full
+    table — used for intermediate queries in the log appendix to keep it focused
+    while still surfacing small results that cost almost no space.
     """
     desc = _clean_description(q.get("description"))
     heading = f"#### {label}" + (f" — {desc}" if desc else "")
@@ -1373,18 +1376,26 @@ def _render_query(
     elif show_results:
         lines += _render_results(q.get("results"))
     else:
-        count = q.get("row_count")
-        note = (
-            f"{count} row(s) — results omitted"
-            if count is not None
-            else "results omitted"
-        )
-        lines += [f"_{note}_", ""]
+        # Compact preview: a single-row result renders in full, a larger one
+        # shows just its first 3 rows (enough to see the shape without bloating
+        # the appendix). Fall back to a bare count note if no rows were stored.
+        preview = _render_results(q.get("results"), max_rows=3)
+        if preview:
+            lines += preview
+        else:
+            count = q.get("row_count")
+            note = f"{count} row(s) — results omitted" if count is not None else "results omitted"
+            lines += [f"_{note}_", ""]
     return lines
 
 
-def _render_results(results: Any) -> list[str]:
-    """Render a query's results as markdown lines (table, code block, or note)."""
+def _render_results(results: Any, max_rows: int | None = None) -> list[str]:
+    """Render a query's results as markdown lines (table, code block, or note).
+
+    ``max_rows`` caps how many rows are tabulated — a preview — while the row
+    count stays the true total, with a "showing first N" note when the table is
+    capped below it. None (default) tabulates every stored row.
+    """
     if results is None:
         return []
     # SPARQL json shape from `sparql_query`: {"vars", "rows", "row_count"}.
@@ -1392,7 +1403,7 @@ def _render_results(results: Any) -> list[str]:
         rows = results.get("rows") or []
         cols = results.get("vars") or (list(rows[0].keys()) if rows else [])
         count = results.get("row_count", len(rows))
-        return [f"_{count} row(s)_", ""] + _rows_to_table(cols, rows)
+        return _rows_section(cols, rows, count, max_rows)
     # csv/tsv shape: {"format", "text"}.
     if isinstance(results, dict) and "text" in results:
         fmt = results.get("format", "")
@@ -1400,9 +1411,24 @@ def _render_results(results: Any) -> list[str]:
     # A bare list of row dicts.
     if isinstance(results, list):
         cols = list(results[0].keys()) if results and isinstance(results[0], dict) else []
-        return [f"_{len(results)} row(s)_", ""] + _rows_to_table(cols, results)
+        return _rows_section(cols, results, len(results), max_rows)
     # Anything else: show as text.
     return ["```", str(results).strip(), "```", ""]
+
+
+def _rows_section(
+    cols: list[str], rows: list[dict[str, Any]], count: int, max_rows: int | None
+) -> list[str]:
+    """A row-count label plus the rows as a table, capping at ``max_rows`` (a
+    preview). A single-row result thus shows in full; a larger one shows its
+    first ``max_rows`` with a note that the table was trimmed."""
+    shown = rows[:max_rows] if max_rows is not None else rows
+    label = (
+        f"_{count} row(s) — showing first {len(shown)}_"
+        if len(shown) < count
+        else f"_{count} row(s)_"
+    )
+    return [label, ""] + _rows_to_table(cols, shown)
 
 
 def _rows_to_table(cols: list[str], rows: list[dict[str, Any]]) -> list[str]:

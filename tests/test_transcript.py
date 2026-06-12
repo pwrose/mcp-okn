@@ -277,7 +277,9 @@ async def test_buried_exploratory_text_stripped_in_render():
     assert "#### Query 1 — Explore NDE schema" in md
 
 
-async def test_intermediate_query_rows_omitted_by_default():
+async def test_intermediate_single_row_query_is_shown_in_full():
+    # A one-row intermediate result costs almost no space, so show it rather
+    # than omitting it.
     intermediate = {
         "vars": ["x"],
         "rows": [{"x": "step-1-value"}],
@@ -295,12 +297,38 @@ async def test_intermediate_query_rows_omitted_by_default():
     )
 
     md = await create_chat_transcript(model="m")
-    # Intermediate (first) query: text shown, rows omitted with a count note.
-    assert "_1 row(s) — results omitted_" in md
-    assert "step-1-value" not in md
+    # Intermediate (first) query: single row rendered, no omission note.
+    assert "results omitted" not in md
+    assert "_1 row(s)_" in md
+    assert "step-1-value" in md
     # Final query: full result table rendered.
     assert "| disease | label |" in md
     assert "| MONDO:0005240 | kidney cancer |" in md
+
+
+async def test_intermediate_multi_row_query_previews_first_three():
+    # A larger intermediate result is capped to its first 3 rows.
+    intermediate = {
+        "vars": ["x"],
+        "rows": [{"x": f"row-{i}"} for i in range(5)],
+        "row_count": 5,
+    }
+    session.record(
+        "SELECT ?x WHERE { GRAPH <https://purl.org/okn/frink/kg/prokn> { ?x ?p ?o } }",
+        "json",
+        result=intermediate,
+    )
+    session.record(
+        "SELECT ?disease ?label WHERE { GRAPH <https://purl.org/okn/frink/kg/sawgraph> { ?x :linkedTo ?disease } }",
+        "json",
+        result=JSON_RESULT,
+    )
+
+    md = await create_chat_transcript(model="m")
+    # First three rows shown, the rest withheld, with a "showing first 3" note.
+    assert "_5 row(s) — showing first 3_" in md
+    assert "row-0" in md and "row-2" in md
+    assert "row-3" not in md and "row-4" not in md
 
 
 async def test_include_intermediate_rows_true_renders_all():

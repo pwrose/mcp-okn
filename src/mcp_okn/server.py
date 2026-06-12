@@ -805,6 +805,36 @@ async def get_join_strategy(kg_a: str, kg_b: str | None = None) -> dict[str, Any
 
 
 @mcp.tool()
+async def list_crosswalks(include_examples: bool = True) -> dict[str, Any]:
+    """List EVERY precomputed cross-KG integration point in one call.
+
+    The federation ships a curated, hand-verified table of join recipes between
+    knowledge graphs. `get_join_strategy` narrows it to one KG or one pair; this
+    returns the whole map at once, so you can discover which graphs connect —
+    and on what shared identifier — without knowing the pair in advance. Each row
+    is a compact summary; call `get_join_strategy(kg_a, kg_b)` for a pair's full
+    recipe (predicates, roles, IRI-normalization snippet, counts).
+
+    Args:
+        include_examples: when True (default), each row carries an
+            `example_question` describing what the join answers. Set False for a
+            more compact listing.
+
+    Returns:
+        `{"verified_on", "count", "crosswalks": [{"id", "kgs", "shared_key",
+        "bridge_kg", "verified_count", "example_question"?}, ...]}`. `kgs` is the
+        sorted set of every KG the join touches (endpoints, bridge, and clique
+        members). `verified_on` dates the counts so staleness is visible.
+    """
+    rows = crosswalk_table.all_crosswalks(include_examples=include_examples)
+    return {
+        "verified_on": crosswalk_table.verified_on(),
+        "count": len(rows),
+        "crosswalks": rows,
+    }
+
+
+@mcp.tool()
 async def sparql_query(
     query: str, format: str = "json", exploratory: bool = False
 ) -> Any:

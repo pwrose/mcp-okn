@@ -78,6 +78,29 @@ def verified_for(shortname: str) -> list[dict[str, Any]]:
     ]
 
 
+def all_crosswalks(include_examples: bool = True) -> list[dict[str, Any]]:
+    """Compact summary of every verified cross-KG integration point.
+
+    One row per verified crosswalk: its id, the KGs it connects (left/right/
+    bridge + clique members, sorted), the shared identifier, the bridge KG if
+    any, and the verified row count. ``example_question`` is included unless
+    ``include_examples`` is False.
+    """
+    rows: list[dict[str, Any]] = []
+    for e in load_crosswalks().get("verified_crosswalks", []):
+        row = {
+            "id": e.get("id"),
+            "kgs": sorted(_entry_kgs(e)),
+            "shared_key": e.get("shared_key"),
+            "bridge_kg": e.get("bridge_kg"),
+            "verified_count": e.get("verified_count"),
+        }
+        if include_examples:
+            row["example_question"] = e.get("example_question")
+        rows.append(row)
+    return rows
+
+
 def join_between(kg_a: str, kg_b: str) -> list[dict[str, Any]]:
     """Verified entries that connect ``kg_a`` and ``kg_b`` (order-insensitive).
 

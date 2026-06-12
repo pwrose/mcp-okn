@@ -4,7 +4,7 @@ import pytest
 
 import mcp_okn.crosswalks as cw
 from mcp_okn.registry import load_snapshot
-from mcp_okn.server import get_join_strategy
+from mcp_okn.server import get_join_strategy, list_crosswalks
 
 
 def test_table_loads_and_is_dated():
@@ -77,6 +77,30 @@ async def test_single_kg_listing_returns_all_its_joins():
     assert "status" not in out  # listing form, not a pair verdict
     assert out["joins"]
     assert all("spoke-okn" in cw._entry_kgs(j) for j in out["joins"])
+
+
+@pytest.mark.asyncio
+async def test_list_crosswalks_returns_every_verified_entry():
+    out = await list_crosswalks()
+    expected = len(cw.load_crosswalks()["verified_crosswalks"])
+    assert out["count"] == expected
+    assert len(out["crosswalks"]) == expected
+    assert all(row["kgs"] for row in out["crosswalks"])  # every join names KGs
+
+
+@pytest.mark.asyncio
+async def test_list_crosswalks_examples_toggle():
+    with_ex = await list_crosswalks()  # default include_examples=True
+    assert all("example_question" in row for row in with_ex["crosswalks"])
+    without_ex = await list_crosswalks(include_examples=False)
+    assert all("example_question" not in row for row in without_ex["crosswalks"])
+
+
+@pytest.mark.asyncio
+async def test_list_crosswalks_carries_verified_date():
+    out = await list_crosswalks()
+    assert out["verified_on"] == cw.verified_on()
+    assert out["verified_on"] is not None
 
 
 def test_island_status_for_island_kg():

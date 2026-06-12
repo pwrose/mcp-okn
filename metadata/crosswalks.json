@@ -1005,6 +1005,27 @@
       "skeleton_verified": true
     },
     {
+      "id": "A12-omim-oardkg-prokn-via-ubergraph",
+      "left_kg": "oard-kg",
+      "left_predicate": "https://w3id.org/biolink/vocab/object",
+      "left_role": "object",
+      "right_kg": "prokn",
+      "right_predicate": "http://www.w3.org/2000/01/rdf-schema#seeAlso",
+      "right_role": "object",
+      "shared_key": "MONDO<->OMIM (bridged)",
+      "key_namespace": "http://purl.obolibrary.org/obo/MONDO_ (oard-kg) ; https://www.omim.org/entry/{id} (prokn) — bridged on OMIM:{id} via ubergraph oboInOwl:hasDbXref",
+      "bridge_kg": "ubergraph",
+      "iri_normalization": "oard-kg keys diseases on MONDO (obo/MONDO_, biolink:object); prokn carries OMIM ids on rdfs:seeAlso as https://www.omim.org/entry/{id} (https + www). Bridge through ubergraph: the MONDO term carries an oboInOwl:hasDbXref CURIE literal 'OMIM:{id}' (10,038 distinct MONDO->OMIM xrefs). Strip the 'OMIM:' prefix and rebuild prokn's https://www.omim.org/entry/{id} IRI, then match it on prokn rdfs:seeAlso. prokn also carries non-numeric OMIM phenotype-series entries (.../entry/MTHU…) which have no MONDO xref and harmlessly do not match.",
+      "verified_count": 347,
+      "verified_count_secondary": {
+        "distinct_omim_ids": 348
+      },
+      "verified_count_note": "DISTINCT oard-kg MONDO diseases that reach a prokn OMIM rdfs:seeAlso via the ubergraph MONDO->OMIM hasDbXref bridge (348 distinct OMIM ids). The OMIM mirror of the DOID<->MONDO bridges A10/A11.",
+      "example_question": "Cross-reference OARD drug/outcome disease associations (oard-kg, MONDO) with ProKN's OMIM-annotated disease evidence by bridging MONDO to OMIM through ubergraph's cross-references.",
+      "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { ?x <https://w3id.org/biolink/vocab/object> ?mondo . FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?mondo <http://www.geneontology.org/formats/oboInOwl#hasDbXref> ?curie . FILTER(STRSTARTS(STR(?curie),'OMIM:')) }\n  BIND(IRI(CONCAT('https://www.omim.org/entry/',REPLACE(STR(?curie),'^OMIM:',''))) AS ?omim)\n  GRAPH <https://purl.org/okn/frink/kg/prokn> { ?y <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?omim . }\n}",
+      "skeleton_verified": true
+    },
+    {
       "id": "A7-doid-spokeokn-prokn",
       "left_kg": "spoke-okn",
       "left_predicate": "node-iri",

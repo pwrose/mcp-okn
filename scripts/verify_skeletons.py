@@ -259,6 +259,17 @@ SELECT (COUNT(DISTINCT ?doid) AS ?n) WHERE {{
   GRAPH {g('oard-kg')} {{ ?x {BL_OBJ} ?mondo . }}
 }}"""
 
+# oard-kg MONDO -> ubergraph hasDbXref 'OMIM:{{id}}' -> prokn OMIM seeAlso.
+# prokn stores OMIM as https://www.omim.org/entry/{{id}} (https, www); rebuild it
+# from the bare id in ubergraph's OMIM CURIE.
+Q["A12-omim-oardkg-prokn-via-ubergraph"] = f"""
+SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {{
+  GRAPH {g('oard-kg')} {{ ?x {BL_OBJ} ?mondo . FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }}
+  GRAPH {g('ubergraph')} {{ ?mondo {DBXREF} ?curie . FILTER(STRSTARTS(STR(?curie),'OMIM:')) }}
+  BIND(IRI(CONCAT('https://www.omim.org/entry/',REPLACE(STR(?curie),'^OMIM:',''))) AS ?omim)
+  GRAPH {g('prokn')} {{ ?y {SEEALSO} ?omim . }}
+}}"""
+
 # --- CHEBI<->CAS bridge ----------------------------------------------------
 Q["B2-chebi-cas-bridge"] = f"""
 SELECT (COUNT(DISTINCT ?c2) AS ?n) WHERE {{

@@ -8,6 +8,7 @@ from mcp_okn.server import (
     _NODE_ID_IRI_PREFIXES,
     find_crosswalks,
     _undercount_note,
+    _split_predicate_note,
     _CROSSWALK_PREDICATES,
 )
 
@@ -24,6 +25,21 @@ def test_undercount_note_fires_only_for_multiple_namespaces():
     )
     assert note is not None
     assert "UNDERCOUNTS" in note and "OMIM" in note and "MONDO" in note
+
+
+def test_split_predicate_note_fires_only_for_multi_predicate_namespace():
+    assert _split_predicate_note([]) is None
+    # One predicate carrying the namespace — nothing is split.
+    assert _split_predicate_note(
+        [{"namespace": "MONDO", "predicates": [("biolink:object", 1659)]}]
+    ) is None
+    note = _split_predicate_note(
+        [{"namespace": "MONDO",
+          "predicates": [("biolink:subject", 2277), ("biolink:object", 1659)]}]
+    )
+    assert note is not None
+    assert "SPLIT across predicate positions" in note and "UNION" in note
+    assert "MONDO" in note and "biolink:subject" in note
 
 
 def test_predicate_to_iri_resolves_curies_and_iris():
@@ -229,6 +245,54 @@ async def test_find_crosswalks_groups_by_predicate(monkeypatch):
     assert mondo["count"] == 5000
     assert mondo["predicates"] == ["http://ex/type", "http://ex/label"]
     assert out["ontology_ids"][1]["role"] == "object"
+
+
+async def test_find_crosswalks_warns_when_namespace_split_across_predicates(monkeypatch):
+    # The oard-kg case: a disease IRI is the object of BOTH biolink:subject and
+    # biolink:object, with differing counts. Joining on one position undercounts,
+    # so the note must flag the split and tell the caller to UNION both.
+    async def fake_run(query, fmt="json", **kw):
+        if _scan_of(query) == "object":
+            return {
+                "vars": ["pred", "namespace", "count"],
+                "rows": [
+                    {"pred": "https://w3id.org/biolink/vocab/subject",
+                     "namespace": "MONDO", "count": 2277},
+                    {"pred": "https://w3id.org/biolink/vocab/object",
+                     "namespace": "MONDO", "count": 1659},
+                ],
+                "row_count": 2,
+            }
+        return {"vars": ["pred", "namespace", "count"], "rows": [], "row_count": 0}
+
+    monkeypatch.setattr(srv, "run_sparql", fake_run)
+    out = await find_crosswalks("oard-kg")
+    assert "SPLIT across predicate positions" in out["note"]
+    assert "UNION" in out["note"]
+    # The collapsed entry still lists both carrying predicates (count = max).
+    mondo = out["ontology_ids"][0]
+    assert mondo["namespace"] == "MONDO" and mondo["count"] == 2277
+    assert len(mondo["predicates"]) == 2
+
+
+async def test_find_crosswalks_no_split_warning_when_counts_match(monkeypatch):
+    # Two predicates carrying the SAME count are likely redundant, not a split —
+    # don't cry wolf (the warning is for diverging cardinalities).
+    async def fake_run(query, fmt="json", **kw):
+        if _scan_of(query) == "object":
+            return {
+                "vars": ["pred", "namespace", "count"],
+                "rows": [
+                    {"pred": "http://ex/seeAlso", "namespace": "HP", "count": 50},
+                    {"pred": "http://ex/sameAs", "namespace": "HP", "count": 50},
+                ],
+                "row_count": 2,
+            }
+        return {"vars": ["pred", "namespace", "count"], "rows": [], "row_count": 0}
+
+    monkeypatch.setattr(srv, "run_sparql", fake_run)
+    out = await find_crosswalks("prokn")
+    assert "SPLIT across predicate positions" not in (out["note"] or "")
 
 
 async def test_find_crosswalks_node_iris_when_no_mapping_predicates(monkeypatch):

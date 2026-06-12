@@ -1,7 +1,7 @@
 {
   "$schema_note": "Combined verified cross-KG joins for the Proto-OKN FRINK federation. Merges the A-I clusters with the spoke-okn geolocation crosswalks: cluster J (ZIP, on spoke-okn's full ~42,724-ZIP set) and cluster K (county/state FIPS, including spoke-okn's attachment to the SAWGraph spatial hub). Duplicates removed. Counts are exact COUNT(DISTINCT) over the named graphs on the verified_on date, EXCEPT cluster O (ufokn), whose verified_count is a SAMPLED lower bound (ufokn is too large for an exact full-graph count within the 120s endpoint limit) - see its verified_count_note. A consumer keyed by KG shortname should surface, for a given shortname, every entry where it appears as left_kg, right_kg, or bridge_kg. Clusters: (A) disease/phenotype - oard-kg is the MONDO/HP hub joining prokn, rdkg, nde and ubergraph; spoke-okn attaches via its 180 DOID Disease nodes (DIRECTLY to the DOID carriers prokn/biomarkerkg/nde, A7-A9, and through an ubergraph DOID->MONDO bridge to rdkg/oard-kg, A10-A11), (B) CAS chemical, (C) gene cluster - keyed across THREE id systems: Entrez/NCBI Gene (spoke-okn, spoke-genelab, rdkg, biobricks-aopwiki; in three IRI forms - see C_gene_cluster note - joined by bare-id rebuild; C4-C8), Ensembl (gene-expression-atlas-okn, pankgraph, spoke-okn's schema/ensembl crosswalk, AOP-Wiki; C1-C3, F1-F2), and HGNC (prokn, bridged to Entrez through wikidata P354->P351; C9), (D) SAWGraph S2 spatial hub, (E) toxicology/AOP CAS, (F) AOP-Wiki gene bridge, (G) UniProt protein, (H) soil-carbon spatial leaf, (I) manufacturing supply-chain, (J) spoke-okn ZIP geography, (K) spoke-okn county/state-FIPS geography. (L) county/state-FIPS attachments of geoconnex, scales and nikg to the SAWGraph spatial hub (spatialkg) and spoke-okn, each carrying the same KWG/FIPS county key under a different non-obvious encoding (geoconnex: geoconnex.us/ref/counties/{FIPS5} reference IRIs on the GNIS county predicate; scales: a NUMERIC hasIdbCounty literal with the leading zero dropped; nikg: a phila.gov-rewritten KWG sfWithin IRI). Cluster L SUPERSEDES three base-file verdicts: scales (was an island on the unpopulated fips:CountyCode field), nikg (was 'no geographic key at all'), and geoconnex (only non-joins were recorded - its S2-cell and SAWGraph PWS reference-IRI non-joins remain valid, but the county-FIPS key is a separate, working route to the hub). Four further KGs profiled for cluster L (maudekg, phaseskg, nasa-gesdisc-kg, wildlifekn) share no materialized join key and are recorded as islands / thin threads. (M) biobricks-mesh: the NLM MeSH vocabulary attaches to ubergraph on MeSH descriptor ids (oboInOwl:hasDbXref 'MESH:{ID}'), 9,463 matches dominated by MONDO disease (8,202), making it a MeSH-keyed member of the disease cluster A; biobricks-pubchem-annotations was profiled in the same pass and is an island (keyed solely on PubChem CID, which no federation KG materializes). Additionally biobricks-mesh has a second, DIRECT MeSH route (M2): spoke-okn MeSH-tags ~165 of its Disease and SDoH nodes via mesh_ids/mesh_list (HTTPS mesh IRIs vs biobricks-mesh's HTTP), uniquely reaching spoke-okn's social-determinants layer that the MONDO route (M1) cannot. (N) fiokg (SAWGraph FRS KG): a full SAWGraph spatial leaf attaching to the spatialkg hub via owl:sameAs to native KWG IRIs - 681,045 S2 Level-13 cells (N1, the LARGEST S2 join in the federation) and 3,031 county-FIPS AdministrativeRegion_2 IRIs (N2; 3,032 to spoke-okn, N3) - and to the manufacturing cluster I on the bare 6-digit NAICS code (N4 sudokn 64/66, N5 securechainkg 301/301). fiokg and the sawgraph leaf OVERLAP directly in 4,712 Maine S2 cells (N6, leaf-to-leaf), useful because fiokg flags 188,057 EPA-PFAS-Facility instances against sawgraph's PFAS samples. fiokg attaches at the county + S2 levels only (no KWG state IRIs); 261 leading-zero-truncated admin IRIs are excluded (see known_non_joins). (O) ufokn (Urban Flooding OKN): a FIFTH SAWGraph S2-cell spatial leaf. ufokn encodes its S2 cells as BLANK NODES (typed schema:PropertyValue + its own kwg:S2Cell ontology class), not KWG resource IRIs, with the 64-bit S2 cell id held as a bare decimal string in schema:value - the IDENTICAL value spatialkg uses as the suffix of its s2.level13.{id} node IRI. Rebuilding that IRI joins ufokn DIRECTLY to spatialkg's S2Cell_Level13 nodes (O1, no value rewrite). Three type-bounded samples (1k/8k/20k cells) all show 100% containment of ufokn's level-13 cells in spatialkg, so this is a near-complete attachment whose exact cardinality is not enumerable within the endpoint limit (verified_count 7,670 is a sampled lower bound). Cluster O SUPERSEDES the base file's two ufokn non-join verdicts ('unprofiled-large' and 'S2 Level-13 = 0'): the 0 was a direct typed-NODE join against blank nodes (can never match) and the timeout was an unbounded scan of ufokn's ~11.7M S2 nodes. ufokn also carries finer S2 LEVEL-18 cells that nest inside the level-13 hub cells but do not attach to the (level-13) hub directly. (P) biobricks-pubchem-annotations PubChem CID -> spoke-okn: spoke-okn materializes the CID as oboInOwl:hasDbXref identifiers.org/pubchem.compound/{n} on its ChemicalEntity nodes (762, exact 100% join after bare-CID normalization), SUPERSEDING the base file's biobricks-pubchem-annotations island verdict - it never checked spoke-okn's hasDbXref.",
   "federation": "https://purl.org/okn/frink/kg",
-  "verified_on": "2026-06-11",
+  "verified_on": "2026-06-12",
   "merged_from": [
     "verified-crosswalks-combined.json (A-I)",
     "spoke-okn-geolocation-crosswalks.json (J)",
@@ -555,10 +555,11 @@
       "key_namespace": "http://purl.obolibrary.org/obo/MONDO_",
       "bridge_kg": null,
       "iri_normalization": null,
-      "verified_count": 713,
+      "verified_count": 889,
       "example_question": "NIAID datasets for a disease (NDE) plus its EHR phenotype signature (OARD).",
-      "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/nde> { ?s <http://schema.org/healthCondition> ?mondo . FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { ?x <https://w3id.org/biolink/vocab/object> ?mondo . }\n}",
-      "skeleton_verified": true
+      "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/nde> { ?s <http://schema.org/healthCondition> ?mondo . FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { { ?x <https://w3id.org/biolink/vocab/object> ?mondo } UNION { ?xs <https://w3id.org/biolink/vocab/subject> ?mondo } }\n}",
+      "skeleton_verified": true,
+      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. Joining on one position only undercounts (was 713, now 889)."
     },
     {
       "id": "L6-county-fips-nikg-spatialkg",
@@ -616,10 +617,11 @@
       "key_namespace": "http://purl.obolibrary.org/obo/HP_",
       "bridge_kg": null,
       "iri_normalization": null,
-      "verified_count": 4841,
+      "verified_count": 4876,
       "example_question": "Phenotypes clinically associated with rare diseases (OARD) that also have protein/marker-gene evidence (ProKN).",
-      "skeleton_query": "SELECT (COUNT(DISTINCT ?hp) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { ?s <https://w3id.org/biolink/vocab/object> ?hp . FILTER(STRSTARTS(STR(?hp),'http://purl.obolibrary.org/obo/HP_')) }\n  GRAPH <https://purl.org/okn/frink/kg/prokn> { ?x <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?hp . }\n}",
-      "skeleton_verified": true
+      "skeleton_query": "SELECT (COUNT(DISTINCT ?hp) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { { ?s <https://w3id.org/biolink/vocab/object> ?hp } UNION { ?ss <https://w3id.org/biolink/vocab/subject> ?hp } FILTER(STRSTARTS(STR(?hp),'http://purl.obolibrary.org/obo/HP_')) }\n  GRAPH <https://purl.org/okn/frink/kg/prokn> { ?x <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?hp . }\n}",
+      "skeleton_verified": true,
+      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. Joining on one position only undercounts (was 4841, now 4876)."
     },
     {
       "id": "A3-mondo",
@@ -633,10 +635,11 @@
       "key_namespace": "http://purl.obolibrary.org/obo/MONDO_",
       "bridge_kg": null,
       "iri_normalization": null,
-      "verified_count": 713,
+      "verified_count": 954,
       "example_question": "Diseases with both EHR phenotype associations (OARD) and marker-gene/protein evidence (ProKN).",
-      "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { ?s <https://w3id.org/biolink/vocab/object> ?mondo . FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/prokn> { ?x <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?mondo . }\n}",
-      "skeleton_verified": true
+      "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { { ?s <https://w3id.org/biolink/vocab/object> ?mondo } UNION { ?ss <https://w3id.org/biolink/vocab/subject> ?mondo } FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/prokn> { ?x <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?mondo . }\n}",
+      "skeleton_verified": true,
+      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. Joining on one position only undercounts (was 713, now 954)."
     },
     {
       "id": "C3-ensembl-disease",
@@ -688,10 +691,11 @@
       "key_namespace": "http://purl.obolibrary.org/obo/MONDO_",
       "bridge_kg": null,
       "iri_normalization": null,
-      "verified_count": 1444,
+      "verified_count": 2014,
       "example_question": "Rare-disease EHR phenotype profile (OARD) combined with contraindicated/treating drugs (RDKG, DrugBank).",
-      "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/rdkg> { ?mondo ?p ?o . FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { ?x <https://w3id.org/biolink/vocab/object> ?mondo . }\n}",
-      "skeleton_verified": true
+      "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/rdkg> { ?mondo ?p ?o . FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { { ?x <https://w3id.org/biolink/vocab/object> ?mondo } UNION { ?xs <https://w3id.org/biolink/vocab/subject> ?mondo } }\n}",
+      "skeleton_verified": true,
+      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. Joining on one position only undercounts (was 1444, now 2014)."
     },
     {
       "id": "C6-entrez-rdkg-spokegenelab",
@@ -998,11 +1002,12 @@
       "key_namespace": "http://purl.obolibrary.org/obo/DOID_ (spoke-okn) ; http://purl.obolibrary.org/obo/MONDO_ (oard-kg)",
       "bridge_kg": "ubergraph",
       "iri_normalization": "spoke-okn keys diseases on DOID (obo/DOID_), oard-kg on MONDO (obo/MONDO_). Bridge through ubergraph: ?mondo skos:exactMatch ?doid (the MONDO term exact-matches the spoke-okn DOID IRI; note the direction — MONDO is subject, DOID object), then match ?mondo in oard-kg. The oboInOwl:hasDbXref CURIE route (MONDO hasDbXref 'DOID:{id}') gives identical coverage. spoke-okn has 180 DOID diseases, of which 28 reach a MONDO present in oard-kg.",
-      "verified_count": 28,
+      "verified_count": 40,
       "verified_count_note": "DISTINCT spoke-okn DOID diseases (of 180) that map to a MONDO present in oard-kg; the exactMatch and hasDbXref bridge routes both give 28. Attaches spoke-okn to the disease-cluster hub. (Corrects a prior 40, which no bridge route reproduces.)",
       "example_question": "EHR-derived disease-phenotype associations (OARD, MONDO) for a spoke-okn disease (DOID), bridged through ubergraph.",
-      "skeleton_query": "SELECT (COUNT(DISTINCT ?doid) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/spoke-okn> { ?doid a <https://w3id.org/biolink/vocab/Disease> . FILTER(STRSTARTS(STR(?doid),'http://purl.obolibrary.org/obo/DOID_')) }\n  GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?mondo <http://www.w3.org/2004/02/skos/core#exactMatch> ?doid . }\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { ?x <https://w3id.org/biolink/vocab/object> ?mondo . }\n}",
-      "skeleton_verified": true
+      "skeleton_query": "SELECT (COUNT(DISTINCT ?doid) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/spoke-okn> { ?doid a <https://w3id.org/biolink/vocab/Disease> . FILTER(STRSTARTS(STR(?doid),'http://purl.obolibrary.org/obo/DOID_')) }\n  GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?mondo <http://www.w3.org/2004/02/skos/core#exactMatch> ?doid . }\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { { ?x <https://w3id.org/biolink/vocab/object> ?mondo } UNION { ?xs <https://w3id.org/biolink/vocab/subject> ?mondo } }\n}",
+      "skeleton_verified": true,
+      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. Joining on one position only undercounts (was 28, now 40)."
     },
     {
       "id": "A12-omim-oardkg-prokn-via-ubergraph",
@@ -1016,14 +1021,15 @@
       "key_namespace": "http://purl.obolibrary.org/obo/MONDO_ (oard-kg) ; https://www.omim.org/entry/{id} (prokn) — bridged on OMIM:{id} via ubergraph oboInOwl:hasDbXref",
       "bridge_kg": "ubergraph",
       "iri_normalization": "oard-kg keys diseases on MONDO (obo/MONDO_, biolink:object); prokn carries OMIM ids on rdfs:seeAlso as https://www.omim.org/entry/{id} (https + www). Bridge through ubergraph: the MONDO term carries an oboInOwl:hasDbXref CURIE literal 'OMIM:{id}' (10,038 distinct MONDO->OMIM xrefs). Strip the 'OMIM:' prefix and rebuild prokn's https://www.omim.org/entry/{id} IRI, then match it on prokn rdfs:seeAlso. prokn also carries non-numeric OMIM phenotype-series entries (.../entry/MTHU…) which have no MONDO xref and harmlessly do not match.",
-      "verified_count": 347,
+      "verified_count": 500,
       "verified_count_secondary": {
         "distinct_omim_ids": 348
       },
       "verified_count_note": "DISTINCT oard-kg MONDO diseases that reach a prokn OMIM rdfs:seeAlso via the ubergraph MONDO->OMIM hasDbXref bridge (348 distinct OMIM ids). The OMIM mirror of the DOID<->MONDO bridges A10/A11.",
       "example_question": "Cross-reference OARD drug/outcome disease associations (oard-kg, MONDO) with ProKN's OMIM-annotated disease evidence by bridging MONDO to OMIM through ubergraph's cross-references.",
-      "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { ?x <https://w3id.org/biolink/vocab/object> ?mondo . FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?mondo <http://www.geneontology.org/formats/oboInOwl#hasDbXref> ?curie . FILTER(STRSTARTS(STR(?curie),'OMIM:')) }\n  BIND(IRI(CONCAT('https://www.omim.org/entry/',REPLACE(STR(?curie),'^OMIM:',''))) AS ?omim)\n  GRAPH <https://purl.org/okn/frink/kg/prokn> { ?y <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?omim . }\n}",
-      "skeleton_verified": true
+      "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { { ?x <https://w3id.org/biolink/vocab/object> ?mondo } UNION { ?xs <https://w3id.org/biolink/vocab/subject> ?mondo } FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?mondo <http://www.geneontology.org/formats/oboInOwl#hasDbXref> ?curie . FILTER(STRSTARTS(STR(?curie),'OMIM:')) }\n  BIND(IRI(CONCAT('https://www.omim.org/entry/',REPLACE(STR(?curie),'^OMIM:',''))) AS ?omim)\n  GRAPH <https://purl.org/okn/frink/kg/prokn> { ?y <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?omim . }\n}",
+      "skeleton_verified": true,
+      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. Joining on one position only undercounts (was 347, now 500)."
     },
     {
       "id": "A7-doid-spokeokn-prokn",
@@ -1224,11 +1230,12 @@
       "key_namespace": "http://purl.obolibrary.org/obo/MONDO_",
       "bridge_kg": null,
       "iri_normalization": "Inline category expansion: ?disease rdfs:subClassOf* <parent MONDO term>; join expanded set to target KG in same query.",
-      "verified_count": 209,
+      "verified_count": 212,
       "verified_against_parent": "http://purl.obolibrary.org/obo/MONDO_0004995 (cardiovascular disease)",
       "example_question": "All cardiovascular-disease subtypes (not just the parent term) present in OARD with their phenotypes.",
-      "skeleton_query": "SELECT (COUNT(DISTINCT ?disease) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?disease <http://www.w3.org/2000/01/rdf-schema#subClassOf>* <http://purl.obolibrary.org/obo/MONDO_0004995> . }\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { ?x <https://w3id.org/biolink/vocab/subject> ?disease . }\n}",
-      "skeleton_verified": true
+      "skeleton_query": "SELECT (COUNT(DISTINCT ?disease) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?disease <http://www.w3.org/2000/01/rdf-schema#subClassOf>* <http://purl.obolibrary.org/obo/MONDO_0004995> . }\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { { ?x <https://w3id.org/biolink/vocab/subject> ?disease } UNION { ?xo <https://w3id.org/biolink/vocab/object> ?disease } }\n}",
+      "skeleton_verified": true,
+      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. Previously subject-only (was 209, now 212)."
     },
     {
       "id": "O1-s2-ufokn-spatialkg",

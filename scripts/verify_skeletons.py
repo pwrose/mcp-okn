@@ -191,28 +191,32 @@ SELECT (COUNT(DISTINCT ?cid) AS ?n) WHERE {{
 }}"""
 
 # --- Disease ontology cluster (DOID / MONDO / HP) --------------------------
+# oard-kg is a biolink-reified KG: a disease/phenotype IRI can sit on EITHER side
+# of an association, so it appears as the object of BOTH biolink:object and
+# biolink:subject. Join on only one position and the recipe undercounts (the
+# silent partial-result failure). UNION both so the join is entity-complete.
 Q["A1-hp"] = f"""
 SELECT (COUNT(DISTINCT ?hp) AS ?n) WHERE {{
-  GRAPH {g('oard-kg')} {{ ?s {BL_OBJ} ?hp . FILTER(STRSTARTS(STR(?hp),'http://purl.obolibrary.org/obo/HP_')) }}
+  GRAPH {g('oard-kg')} {{ {{ ?s {BL_OBJ} ?hp }} UNION {{ ?ss {BL_SUBJ} ?hp }} FILTER(STRSTARTS(STR(?hp),'http://purl.obolibrary.org/obo/HP_')) }}
   GRAPH {g('prokn')} {{ ?x {SEEALSO} ?hp . }}
 }}"""
 
 Q["A3-mondo"] = f"""
 SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {{
-  GRAPH {g('oard-kg')} {{ ?s {BL_OBJ} ?mondo . FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }}
+  GRAPH {g('oard-kg')} {{ {{ ?s {BL_OBJ} ?mondo }} UNION {{ ?ss {BL_SUBJ} ?mondo }} FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }}
   GRAPH {g('prokn')} {{ ?x {SEEALSO} ?mondo . }}
 }}"""
 
 Q["A4-mondo"] = f"""
 SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {{
   GRAPH {g('nde')} {{ ?s <http://schema.org/healthCondition> ?mondo . FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }}
-  GRAPH {g('oard-kg')} {{ ?x {BL_OBJ} ?mondo . }}
+  GRAPH {g('oard-kg')} {{ {{ ?x {BL_OBJ} ?mondo }} UNION {{ ?xs {BL_SUBJ} ?mondo }} }}
 }}"""
 
 Q["A2-mondo"] = f"""
 SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {{
   GRAPH {g('rdkg')} {{ ?mondo ?p ?o . FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }}
-  GRAPH {g('oard-kg')} {{ ?x {BL_OBJ} ?mondo . }}
+  GRAPH {g('oard-kg')} {{ {{ ?x {BL_OBJ} ?mondo }} UNION {{ ?xs {BL_SUBJ} ?mondo }} }}
 }}"""
 
 Q["A5-doid"] = f"""
@@ -224,7 +228,7 @@ SELECT (COUNT(DISTINCT ?doid) AS ?n) WHERE {{
 Q["A6-mondo-expansion"] = f"""
 SELECT (COUNT(DISTINCT ?disease) AS ?n) WHERE {{
   GRAPH {g('ubergraph')} {{ ?disease {SUBCLASS}* <http://purl.obolibrary.org/obo/MONDO_0004995> . }}
-  GRAPH {g('oard-kg')} {{ ?x {BL_SUBJ} ?disease . }}
+  GRAPH {g('oard-kg')} {{ {{ ?x {BL_SUBJ} ?disease }} UNION {{ ?xo {BL_OBJ} ?disease }} }}
 }}"""
 
 Q["A7-doid-spokeokn-prokn"] = f"""
@@ -256,7 +260,7 @@ Q["A11-doid-mondo-spokeokn-oardkg"] = f"""
 SELECT (COUNT(DISTINCT ?doid) AS ?n) WHERE {{
   GRAPH {g('spoke-okn')} {{ ?doid a <https://w3id.org/biolink/vocab/Disease> . FILTER(STRSTARTS(STR(?doid),'http://purl.obolibrary.org/obo/DOID_')) }}
   GRAPH {g('ubergraph')} {{ ?mondo {EXACT} ?doid . }}
-  GRAPH {g('oard-kg')} {{ ?x {BL_OBJ} ?mondo . }}
+  GRAPH {g('oard-kg')} {{ {{ ?x {BL_OBJ} ?mondo }} UNION {{ ?xs {BL_SUBJ} ?mondo }} }}
 }}"""
 
 # oard-kg MONDO -> ubergraph hasDbXref 'OMIM:{{id}}' -> prokn OMIM seeAlso.
@@ -264,7 +268,7 @@ SELECT (COUNT(DISTINCT ?doid) AS ?n) WHERE {{
 # from the bare id in ubergraph's OMIM CURIE.
 Q["A12-omim-oardkg-prokn-via-ubergraph"] = f"""
 SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {{
-  GRAPH {g('oard-kg')} {{ ?x {BL_OBJ} ?mondo . FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }}
+  GRAPH {g('oard-kg')} {{ {{ ?x {BL_OBJ} ?mondo }} UNION {{ ?xs {BL_SUBJ} ?mondo }} FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }}
   GRAPH {g('ubergraph')} {{ ?mondo {DBXREF} ?curie . FILTER(STRSTARTS(STR(?curie),'OMIM:')) }}
   BIND(IRI(CONCAT('https://www.omim.org/entry/',REPLACE(STR(?curie),'^OMIM:',''))) AS ?omim)
   GRAPH {g('prokn')} {{ ?y {SEEALSO} ?omim . }}

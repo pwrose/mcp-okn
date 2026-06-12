@@ -346,12 +346,46 @@ def _undercount_note(namespaces: list[dict[str, Any]]) -> str | None:
     )
 
 
+def _split_predicate_note(carriers: list[dict[str, Any]]) -> str | None:
+    """Warn when one identifier namespace is reachable through 2+ predicates with
+    DIFFERING distinct-id counts, so a recipe that joins on a single predicate
+    silently UNDERCOUNTS — the predicate-position analogue of the cross-namespace
+    split (`_undercount_note`). The trap case: a disease IRI that is the object of
+    BOTH ``biolink:subject`` and ``biolink:object`` (oard-kg), where joining on
+    one position drops the rest. ``carriers`` is one entry per namespace, each
+    ``{"namespace", "predicates": [(predicate, count), ...]}`` busiest first; only
+    those with 2+ predicates of diverging counts are a true split. None when none
+    qualify."""
+    split = [
+        c
+        for c in carriers
+        if c.get("namespace")
+        and len(c.get("predicates", [])) >= 2
+        and c["predicates"][0][1] > c["predicates"][-1][1]
+    ]
+    if not split:
+        return None
+    examples = [
+        f"{c['namespace']} via "
+        + ", ".join(f"{p} ({n})" for p, n in c["predicates"][:3])
+        for c in split[:3]
+    ]
+    return (
+        f"{len(split)} identifier namespace(s) are carried by MULTIPLE "
+        f"predicates with differing counts ({'; '.join(examples)}). The entity is "
+        "SPLIT across predicate positions, so joining on just one UNDERCOUNTS and "
+        "looks like a complete answer. UNION the per-predicate joins "
+        "(`{ ?x p1 ?id } UNION { ?y p2 ?id }`) to capture them all."
+    )
+
+
 def _crosswalk_note(
     crosswalks: list[dict[str, Any]],
     ontology_ids: list[dict[str, Any]],
     flat: list[dict[str, Any]],
     node_scan_failed: bool = False,
     sample: int = 0,
+    split_carriers: list[dict[str, Any]] | None = None,
 ) -> str | None:
     """Compose the find_crosswalks note. Leads with the headline that ids exist
     only as node IRIs / domain objects when no mapping predicate carries them
@@ -381,6 +415,9 @@ def _crosswalk_note(
     undercount = _undercount_note(flat)
     if undercount:
         parts.append(undercount)
+    split = _split_predicate_note(split_carriers or [])
+    if split:
+        parts.append(split)
     return " ".join(parts) or None
 
 
@@ -658,6 +695,9 @@ async def find_crosswalks(shortname: str, sample: int = 0) -> dict[str, Any]:
     # once) and list the carrying predicates, busiest first (the edge to join on
     # for an object-role id).
     ontology_ids: list[dict[str, Any]] = []
+    # Per namespace, the distinct-id count each predicate carries (across BOTH
+    # roles) — feeds the split-predicate undercount warning below.
+    ns_preds: dict[str, dict[str, int]] = {}
     for role, res in (("subject", subj_res), ("object", obj_res)):
         if isinstance(res, Exception):
             continue
@@ -672,6 +712,8 @@ async def find_crosswalks(shortname: str, sample: int = 0) -> dict[str, Any]:
             entry["count"] = max(entry["count"], cnt)
             if pred:
                 entry["_preds"][pred] = max(entry["_preds"].get(pred, 0), cnt)
+                pc = ns_preds.setdefault(ns, {})
+                pc[pred] = max(pc.get(pred, 0), cnt)
         ontology_ids.extend(
             {
                 "role": e["role"],
@@ -693,6 +735,18 @@ async def find_crosswalks(shortname: str, sample: int = 0) -> dict[str, Any]:
         if o["namespace"]:
             seen[o["namespace"]] = seen.get(o["namespace"], 0) + o["count"]
     flat = [{"namespace": k, "count": v} for k, v in seen.items()]
+    # Per namespace, the predicates that carry it (busiest first). A namespace
+    # carried by 2+ predicates with differing counts is split across predicate
+    # positions — joining on one undercounts (the oard-kg MONDO case). The
+    # divergence filter lives in `_split_predicate_note`.
+    split_carriers = [
+        {
+            "namespace": ns,
+            "predicates": sorted(preds.items(), key=lambda kv: kv[1], reverse=True),
+        }
+        for ns, preds in ns_preds.items()
+    ]
+    split_carriers.sort(key=lambda c: c["predicates"][0][1], reverse=True)
     note = _crosswalk_note(
         crosswalks,
         ontology_ids,
@@ -700,6 +754,7 @@ async def find_crosswalks(shortname: str, sample: int = 0) -> dict[str, Any]:
         node_scan_failed=isinstance(subj_res, SparqlError)
         or isinstance(obj_res, SparqlError),
         sample=sample,
+        split_carriers=split_carriers,
     )
     # Point at the verified precomputed table when it covers this KG — those join
     # recipes are reliable where this live scan is not.

@@ -639,7 +639,8 @@
       "example_question": "Diseases with both EHR phenotype associations (OARD) and marker-gene/protein evidence (ProKN).",
       "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { { ?s <https://w3id.org/biolink/vocab/object> ?mondo } UNION { ?ss <https://w3id.org/biolink/vocab/subject> ?mondo } FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/prokn> { ?x <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?mondo . }\n}",
       "skeleton_verified": true,
-      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. Joining on one position only undercounts (was 713, now 954)."
+      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. Joining on one position only undercounts (was 713, now 954).",
+      "complementary_note": "Complementary to the OMIM→ubergraph bridge for this SAME pair (the 'MONDO<->OMIM (bridged)' linkage). This direct MONDO join reaches a prokn disease only if its node carries a matching MONDO cross-reference; a prokn disease annotated only with OMIM is silently dropped here and recovered by the bridge. UNION both linkages for complete oard-kg<->prokn disease coverage — the bridge often reaches MORE diseases than the direct join, so do not pick just one."
     },
     {
       "id": "C3-ensembl-disease",
@@ -1029,7 +1030,8 @@
       "example_question": "Cross-reference OARD drug/outcome disease associations (oard-kg, MONDO) with ProKN's OMIM-annotated disease evidence by bridging MONDO to OMIM through ubergraph's cross-references.",
       "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { { ?x <https://w3id.org/biolink/vocab/object> ?mondo } UNION { ?xs <https://w3id.org/biolink/vocab/subject> ?mondo } FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?mondo <http://www.geneontology.org/formats/oboInOwl#hasDbXref> ?curie . FILTER(STRSTARTS(STR(?curie),'OMIM:')) }\n  BIND(IRI(CONCAT('https://www.omim.org/entry/',REPLACE(STR(?curie),'^OMIM:',''))) AS ?omim)\n  GRAPH <https://purl.org/okn/frink/kg/prokn> { ?y <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?omim . }\n}",
       "skeleton_verified": true,
-      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. Joining on one position only undercounts (was 347, now 500)."
+      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. Joining on one position only undercounts (was 347, now 500).",
+      "complementary_note": "Complementary to the direct MONDO seeAlso join for this SAME pair (the 'MONDO' linkage). This bridge recovers prokn diseases annotated only with OMIM (no usable MONDO cross-reference of their own), which the direct join misses. UNION both linkages for complete oard-kg<->prokn disease coverage; do not pick just one."
     },
     {
       "id": "A7-doid-spokeokn-prokn",

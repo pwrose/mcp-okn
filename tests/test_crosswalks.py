@@ -4,7 +4,7 @@ import pytest
 
 import mcp_okn.crosswalks as cw
 from mcp_okn.registry import load_snapshot
-from mcp_okn.server import get_join_strategy, list_crosswalks
+from mcp_okn.server import _complementary_note, get_join_strategy, list_crosswalks
 
 
 def test_table_loads_and_is_dated():
@@ -170,6 +170,43 @@ async def test_get_join_strategy_returns_skeleton_not_recipe():
     listing = await get_join_strategy("biobricks-aopwiki")
     assert all("iri_normalization" not in e for e in listing["joins"])
     assert any("skeleton_query" in e for e in listing["joins"])
+
+
+def test_complementary_note_fires_only_for_two_tagged_linkages():
+    assert _complementary_note([]) is None
+    assert _complementary_note([{"shared_key": "MONDO", "complementary_note": "x"}]) is None
+    # An untagged second linkage (e.g. HP phenotypes) must not trigger it.
+    assert _complementary_note(
+        [{"shared_key": "MONDO", "complementary_note": "x"}, {"shared_key": "HP"}]
+    ) is None
+    note = _complementary_note(
+        [
+            {"shared_key": "MONDO", "complementary_note": "direct"},
+            {"shared_key": "MONDO<->OMIM (bridged)", "complementary_note": "bridge"},
+        ]
+    )
+    assert note is not None
+    assert "COMPLEMENTARY" in note and "UNION" in note
+    assert "MONDO" in note and "OMIM" in note
+
+
+@pytest.mark.asyncio
+async def test_oardkg_prokn_disease_linkages_flagged_complementary():
+    """oard-kg↔prokn has a direct MONDO join AND an OMIM-via-ubergraph bridge that
+    reach distinct disease sets; the pair result must flag them as complementary
+    and each carry its own complementary_note (the cross-link)."""
+    out = await get_join_strategy("oard-kg", "prokn")
+    assert out["status"] == "verified"
+    assert "COMPLEMENTARY" in out["note"] and "UNION" in out["note"]
+    tagged = {
+        j["shared_key"]: j["complementary_note"]
+        for j in out["joins"]
+        if j.get("complementary_note")
+    }
+    assert "MONDO" in tagged
+    assert any("OMIM" in k for k in tagged)
+    # Each tagged recipe names the other path, so the link is navigable.
+    assert "OMIM" in tagged["MONDO"]
 
 
 def test_island_status_for_island_kg():

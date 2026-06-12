@@ -775,6 +775,27 @@ async def find_crosswalks(shortname: str, sample: int = 0) -> dict[str, Any]:
     }
 
 
+def _complementary_note(joins: list[dict[str, Any]]) -> str | None:
+    """Flag when a pair has 2+ COMPLEMENTARY linkages — recipes that link the
+    same entity through different identifier systems (e.g. oard-kg↔prokn diseases
+    via direct MONDO AND via the OMIM→ubergraph bridge) and so reach overlapping
+    but DISTINCT sets. Presented side by side they read as alternatives, and an
+    agent picks one and undercounts; this says to UNION them. Driven by the
+    curated ``complementary_note`` tag on each recipe (a coarse same-domain
+    heuristic would wrongly lump phenotypes in with diseases). None when fewer
+    than two tagged linkages are present."""
+    tagged = [j for j in joins if j.get("complementary_note")]
+    if len(tagged) < 2:
+        return None
+    keys = ", ".join(dict.fromkeys(j.get("shared_key") or "?" for j in tagged))
+    return (
+        f"{len(tagged)} of these linkages are COMPLEMENTARY ({keys}): they link "
+        "the same entity through different identifiers and reach overlapping but "
+        "DISTINCT sets, so a complete answer UNIONs them — do not pick just one. "
+        "See each recipe's `complementary_note` for what each path uniquely adds."
+    )
+
+
 @mcp.tool()
 async def get_join_strategy(kg_a: str, kg_b: str | None = None) -> dict[str, Any]:
     """Look up a PRECOMPUTED, verified recipe for joining two KGs.
@@ -805,7 +826,10 @@ async def get_join_strategy(kg_a: str, kg_b: str | None = None) -> dict[str, Any
         `skeleton_query` — the example SPARQL to copy and build on (it encodes the
         IRI-normalization, so no separate prose recipe is returned).
         `skeleton_verified: true` means it reproduced `verified_count` exactly when
-        last run on `verified_on`.
+        last run on `verified_on`. When two recipes link the same entity through
+        different identifiers (e.g. direct MONDO AND an OMIM bridge), each carries
+        a `complementary_note` and a top-level `note` flags that they are
+        COMPLEMENTARY — UNION them for complete coverage rather than picking one.
       * `{"status": "known_non_join", "non_joins": [...]}` — this pair was CHECKED
         and does not join on the obvious key. Do NOT attempt it; read `diagnosis`.
       * `{"status": "unknown", ...}` — nothing precomputed. Fall back to
@@ -830,7 +854,11 @@ async def get_join_strategy(kg_a: str, kg_b: str | None = None) -> dict[str, Any
 
     joins = crosswalk_table.join_between(kg_a, kg_b)
     if joins:
-        return {"status": "verified", "verified_on": verified_on, "joins": joins}
+        out = {"status": "verified", "verified_on": verified_on, "joins": joins}
+        complementary = _complementary_note(joins)
+        if complementary:
+            out["note"] = complementary
+        return out
 
     non_joins = crosswalk_table.nonjoin_between(kg_a, kg_b)
     if non_joins:

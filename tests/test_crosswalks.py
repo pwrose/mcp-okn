@@ -144,6 +144,20 @@ async def test_list_crosswalks_carries_verified_date():
 
 
 @pytest.mark.asyncio
+async def test_get_join_strategy_joins_carry_domain_and_group():
+    """Joins carry a domain and a multi-join listing is grouped by domain (sorted
+    by (domain, shared_key)), consistent with list_crosswalks."""
+    listing = await get_join_strategy("spoke-okn")  # touches many domains
+    joins = listing["joins"]
+    assert len(joins) > 1
+    assert all(j.get("domain") and j["domain"] != "Other" for j in joins)
+    keys = [(j["domain"], j["shared_key"] or "", j.get("id") or "") for j in joins]
+    assert keys == sorted(keys), "single-KG joins not grouped by domain"
+    pair = await get_join_strategy("oard-kg", "prokn")
+    assert all("domain" in j for j in pair["joins"])
+
+
+@pytest.mark.asyncio
 async def test_get_join_strategy_returns_skeleton_not_recipe():
     """The retrieval tool guides queries with the runnable skeleton_query and
     omits the prose iri_normalization recipe (the skeleton encodes it)."""

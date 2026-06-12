@@ -79,19 +79,30 @@ def for_query(entry: dict[str, Any]) -> dict[str, Any]:
     Returns a copy with the prose recipe (``iri_normalization``) removed: the
     bundled ``skeleton_query`` is a verified, runnable example that already
     encodes the same normalization, so it — not the prose — is what guides a
-    caller writing SPARQL.
+    caller writing SPARQL. A ``domain`` field is added (see :func:`domain_for`)
+    so a multi-join listing groups consistently with ``list_crosswalks``.
     """
-    return {k: v for k, v in entry.items() if k not in _RECIPE_ONLY_FIELDS}
+    out = {k: v for k, v in entry.items() if k not in _RECIPE_ONLY_FIELDS}
+    out["domain"] = domain_for(entry.get("shared_key"))
+    return out
+
+
+def _listing_sort_key(row: dict[str, Any]) -> tuple[str, str, str]:
+    """Sort joins by (domain, shared_key, id) so a listing groups by domain."""
+    return (row.get("domain", ""), row.get("shared_key") or "", row.get("id") or "")
 
 
 def verified_for(shortname: str) -> list[dict[str, Any]]:
-    """All verified join entries that touch ``shortname`` (any role)."""
+    """All verified join entries that touch ``shortname`` (any role), grouped by
+    domain (sorted by ``(domain, shared_key)``)."""
     data = load_crosswalks()
-    return [
+    out = [
         for_query(e)
         for e in data.get("verified_crosswalks", [])
         if shortname in _entry_kgs(e)
     ]
+    out.sort(key=_listing_sort_key)
+    return out
 
 
 def _ordered_kgs(entry: dict[str, Any]) -> list[str]:
@@ -184,6 +195,7 @@ def join_between(kg_a: str, kg_b: str) -> list[dict[str, Any]]:
         kgs = _entry_kgs(e)
         if kg_a in kgs and kg_b in kgs:
             out.append(for_query(e))
+    out.sort(key=_listing_sort_key)
     return out
 
 

@@ -746,16 +746,18 @@ async def get_join_strategy(kg_a: str, kg_b: str | None = None) -> dict[str, Any
         Each recipe carries `left_kg/right_kg`, `left_predicate/right_predicate`
         (`"node-iri"` means the id IS the entity's own IRI — join directly on it),
         `left_role/right_role`, `shared_key`, `key_namespace`, `bridge_kg`,
-        `verified_count`, `example_question`, and a runnable `skeleton_query` — the
-        example SPARQL to copy and build on (it encodes the IRI-normalization, so
-        no separate prose recipe is returned). `skeleton_verified: true` means it
-        reproduced `verified_count` exactly when last run on `verified_on`.
+        `domain`, `verified_count`, `example_question`, and a runnable
+        `skeleton_query` — the example SPARQL to copy and build on (it encodes the
+        IRI-normalization, so no separate prose recipe is returned).
+        `skeleton_verified: true` means it reproduced `verified_count` exactly when
+        last run on `verified_on`.
       * `{"status": "known_non_join", "non_joins": [...]}` — this pair was CHECKED
         and does not join on the obvious key. Do NOT attempt it; read `diagnosis`.
       * `{"status": "unknown", ...}` — nothing precomputed. Fall back to
         `find_crosswalks(kg_a)` / `find_crosswalks(kg_b)` to discover a key live.
     Returns (kg_b omitted) `{"shortname", "joins": [...], "island": {...}|None,
-    "known_non_joins": [...]}` — every verified join touching `kg_a`.
+    "known_non_joins": [...]}` — every verified join touching `kg_a`, the `joins`
+    grouped by `domain` (sorted by `(domain, shared_key)`) like `list_crosswalks`.
 
     `island`/`known_non_join` context is included whenever present so you can tell
     apart "not yet profiled" from "verified to share no key". `verified_on` dates

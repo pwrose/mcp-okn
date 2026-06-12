@@ -111,6 +111,19 @@ async def test_list_crosswalks_uses_official_kg_shortnames():
 
 
 @pytest.mark.asyncio
+async def test_list_crosswalks_orders_bridge_in_the_middle():
+    """For a bridged join the bridge KG sits between the two endpoints, not at an
+    alphabetical end (e.g. oard-kg → ubergraph → prokn, not → prokn → ubergraph)."""
+    out = await list_crosswalks()
+    bridged = [r for r in out["crosswalks"] if r["bridge_kg"]]
+    assert bridged, "expected at least one bridged crosswalk"
+    for r in bridged:
+        kgs = r["kgs"]
+        assert kgs[1] == r["bridge_kg"], (r["bridge_kg"], kgs)
+        assert len(kgs) == 3
+
+
+@pytest.mark.asyncio
 async def test_list_crosswalks_carries_verified_date():
     out = await list_crosswalks()
     assert out["verified_on"] == cw.verified_on()

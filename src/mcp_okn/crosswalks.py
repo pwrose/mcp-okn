@@ -94,11 +94,24 @@ def verified_for(shortname: str) -> list[dict[str, Any]]:
     ]
 
 
+def _ordered_kgs(entry: dict[str, Any]) -> list[str]:
+    """KGs of an entry in join order: left → bridge → right.
+
+    The bridge graph (e.g. ``ubergraph``) sits in the MIDDLE — it is what the two
+    endpoints meet through — so a plain alphabetical sort would misleadingly push
+    it to one end. Clique entries (``members``, no left/right) keep sorted order.
+    """
+    if entry.get("members"):
+        return sorted(entry["members"])
+    ordered = [entry.get("left_kg"), entry.get("bridge_kg"), entry.get("right_kg")]
+    return [kg for kg in ordered if kg]
+
+
 def all_crosswalks(include_examples: bool = True) -> list[dict[str, Any]]:
     """Compact summary of every verified cross-KG integration point.
 
-    One row per verified crosswalk: the KGs it connects (left/right/bridge +
-    clique members, sorted, by official registry shortname), the shared
+    One row per verified crosswalk: the KGs it connects in join order
+    (left → bridge → right, by official registry shortname), the shared
     identifier, the bridge KG if any, and the verified row count.
     ``example_question`` is included unless ``include_examples`` is False.
 
@@ -110,7 +123,7 @@ def all_crosswalks(include_examples: bool = True) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for e in load_crosswalks().get("verified_crosswalks", []):
         row = {
-            "kgs": sorted(_entry_kgs(e)),
+            "kgs": _ordered_kgs(e),
             "shared_key": e.get("shared_key"),
             "bridge_kg": e.get("bridge_kg"),
             "verified_count": e.get("verified_count"),

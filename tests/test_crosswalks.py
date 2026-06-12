@@ -97,10 +97,39 @@ async def test_list_crosswalks_examples_toggle():
 
 
 @pytest.mark.asyncio
+async def test_list_crosswalks_uses_official_kg_shortnames():
+    """Every KG named in the listing must be an official registry shortname (the
+    same id `list_kgs`/`describe_kg`/`query` accept), never a table-local alias."""
+    official = {k["shortname"] for k in load_snapshot()}
+    out = await list_crosswalks()
+    used = {kg for row in out["crosswalks"] for kg in row["kgs"]}
+    assert used, "no KGs surfaced"
+    assert used <= official, f"non-official shortnames: {sorted(used - official)}"
+    # The table `id` (e.g. "M2-mesh-spokeokn") embeds non-official KG
+    # abbreviations, so it must not appear in the listing.
+    assert all("id" not in row for row in out["crosswalks"])
+
+
+@pytest.mark.asyncio
 async def test_list_crosswalks_carries_verified_date():
     out = await list_crosswalks()
     assert out["verified_on"] == cw.verified_on()
     assert out["verified_on"] is not None
+
+
+@pytest.mark.asyncio
+async def test_get_join_strategy_returns_skeleton_not_recipe():
+    """The retrieval tool guides queries with the runnable skeleton_query and
+    omits the prose iri_normalization recipe (the skeleton encodes it)."""
+    out = await get_join_strategy("biobricks-aopwiki", "biobricks-toxcast")
+    assert out["status"] == "verified"
+    j = out["joins"][0]
+    assert "skeleton_query" in j and "COUNT(" in j["skeleton_query"]
+    assert "iri_normalization" not in j
+    # The single-KG listing form drops the recipe too.
+    listing = await get_join_strategy("biobricks-aopwiki")
+    assert all("iri_normalization" not in e for e in listing["joins"])
+    assert any("skeleton_query" in e for e in listing["joins"])
 
 
 def test_island_status_for_island_kg():
@@ -114,6 +143,26 @@ def test_thin_thread_kg_surfaces_threads_without_being_an_island():
     assert status is not None
     assert status["island"] is False
     assert status["thin_threads"]
+
+
+def test_skeleton_queries_are_well_formed():
+    """Every bundled skeleton_query must be a runnable COUNT join that scopes the
+    entry's KGs with named GRAPH blocks, and carry honest verification metadata."""
+    data = cw.load_crosswalks()
+    skeletons = [e for e in data["verified_crosswalks"] if e.get("skeleton_query")]
+    assert len(skeletons) >= 50, f"only {len(skeletons)} skeletons; expected most of 61"
+    for e in skeletons:
+        q = e["skeleton_query"]
+        assert "SELECT" in q and "COUNT(" in q, e["id"]
+        # The endpoints it joins must each appear as a scoped named graph.
+        for kg in cw._entry_kgs(e):
+            if kg in ("ubergraph", "wikidata"):  # bridges aren't always GRAPH-scoped by id
+                continue
+            assert f"/kg/{kg}>" in q, f"{e['id']} skeleton omits graph {kg}"
+        assert e.get("skeleton_verified") in (True, False), e["id"]
+        # Near-misses must disclose what they actually returned.
+        if e["skeleton_verified"] is False:
+            assert "skeleton_returns" in e, e["id"]
 
 
 def test_every_referenced_kg_exists_in_the_registry_snapshot():

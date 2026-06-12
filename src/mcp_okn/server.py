@@ -730,10 +730,12 @@ async def get_join_strategy(kg_a: str, kg_b: str | None = None) -> dict[str, Any
     hand-verified table (exact `COUNT(DISTINCT)` over the named graphs on
     `verified_on`) instead, so it is fast and reliable. It tells you not just THAT
     two KGs join but exactly HOW: the predicates and roles on each side, the shared
-    identifier and its namespace, any bridge graph, and — critically — the
-    `iri_normalization` snippet (the `REPLACE`/`CONCAT` rewrite to apply at query
-    time, since the same id often appears in 2-3 IRI forms and a naive join
-    silently returns nothing).
+    identifier and its namespace, any bridge graph, and — critically — a runnable
+    `skeleton_query`: a verified, minimal `COUNT(DISTINCT <shared key>)` join that
+    already applies every IRI rewrite (the same id often appears in 2-3 IRI forms,
+    so a naive join silently returns nothing). Start from that query — run it to
+    confirm the key still joins, then extend it with your own payload instead of
+    rebuilding the boilerplate.
 
     Args:
         kg_a: a KG shortname (as from `list_kgs`).
@@ -744,7 +746,10 @@ async def get_join_strategy(kg_a: str, kg_b: str | None = None) -> dict[str, Any
         Each recipe carries `left_kg/right_kg`, `left_predicate/right_predicate`
         (`"node-iri"` means the id IS the entity's own IRI — join directly on it),
         `left_role/right_role`, `shared_key`, `key_namespace`, `bridge_kg`,
-        `iri_normalization`, `verified_count`, and `example_question`.
+        `verified_count`, `example_question`, and a runnable `skeleton_query` — the
+        example SPARQL to copy and build on (it encodes the IRI-normalization, so
+        no separate prose recipe is returned). `skeleton_verified: true` means it
+        reproduced `verified_count` exactly when last run on `verified_on`.
       * `{"status": "known_non_join", "non_joins": [...]}` — this pair was CHECKED
         and does not join on the obvious key. Do NOT attempt it; read `diagnosis`.
       * `{"status": "unknown", ...}` — nothing precomputed. Fall back to
@@ -821,10 +826,12 @@ async def list_crosswalks(include_examples: bool = True) -> dict[str, Any]:
             more compact listing.
 
     Returns:
-        `{"verified_on", "count", "crosswalks": [{"id", "kgs", "shared_key",
+        `{"verified_on", "count", "crosswalks": [{"kgs", "shared_key",
         "bridge_kg", "verified_count", "example_question"?}, ...]}`. `kgs` is the
         sorted set of every KG the join touches (endpoints, bridge, and clique
-        members). `verified_on` dates the counts so staleness is visible.
+        members), each an official registry shortname usable directly with
+        `describe_kg`/`get_schema`/`query`. `verified_on` dates the counts so
+        staleness is visible.
     """
     rows = crosswalk_table.all_crosswalks(include_examples=include_examples)
     return {

@@ -39,3 +39,6 @@ htmlcov/
 .idea/
 .vscode/
 .DS_Store
+
+# verify_skeletons.py live-run cache
+scripts/.skeleton_results.json

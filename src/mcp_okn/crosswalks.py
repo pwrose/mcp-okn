@@ -68,11 +68,27 @@ def _nonjoin_kgs(entry: dict[str, Any]) -> set[str]:
     return kgs
 
 
+# The prose recipe is dropped from query-facing output in favour of the runnable
+# skeleton_query, which encodes the same IRI-normalization executably.
+_RECIPE_ONLY_FIELDS = ("iri_normalization",)
+
+
+def for_query(entry: dict[str, Any]) -> dict[str, Any]:
+    """Project a verified crosswalk for query guidance.
+
+    Returns a copy with the prose recipe (``iri_normalization``) removed: the
+    bundled ``skeleton_query`` is a verified, runnable example that already
+    encodes the same normalization, so it — not the prose — is what guides a
+    caller writing SPARQL.
+    """
+    return {k: v for k, v in entry.items() if k not in _RECIPE_ONLY_FIELDS}
+
+
 def verified_for(shortname: str) -> list[dict[str, Any]]:
     """All verified join entries that touch ``shortname`` (any role)."""
     data = load_crosswalks()
     return [
-        e
+        for_query(e)
         for e in data.get("verified_crosswalks", [])
         if shortname in _entry_kgs(e)
     ]
@@ -81,15 +97,19 @@ def verified_for(shortname: str) -> list[dict[str, Any]]:
 def all_crosswalks(include_examples: bool = True) -> list[dict[str, Any]]:
     """Compact summary of every verified cross-KG integration point.
 
-    One row per verified crosswalk: its id, the KGs it connects (left/right/
-    bridge + clique members, sorted), the shared identifier, the bridge KG if
-    any, and the verified row count. ``example_question`` is included unless
-    ``include_examples`` is False.
+    One row per verified crosswalk: the KGs it connects (left/right/bridge +
+    clique members, sorted, by official registry shortname), the shared
+    identifier, the bridge KG if any, and the verified row count.
+    ``example_question`` is included unless ``include_examples`` is False.
+
+    The internal table ``id`` is deliberately omitted: it embeds KG abbreviations
+    (e.g. ``M2-mesh-spokeokn``) that are NOT official shortnames, so a listing
+    keyed on it would misname KGs. Callers identify a crosswalk by its ``kgs``
+    (official shortnames) and ``shared_key``.
     """
     rows: list[dict[str, Any]] = []
     for e in load_crosswalks().get("verified_crosswalks", []):
         row = {
-            "id": e.get("id"),
             "kgs": sorted(_entry_kgs(e)),
             "shared_key": e.get("shared_key"),
             "bridge_kg": e.get("bridge_kg"),
@@ -111,7 +131,7 @@ def join_between(kg_a: str, kg_b: str) -> list[dict[str, Any]]:
     for e in load_crosswalks().get("verified_crosswalks", []):
         kgs = _entry_kgs(e)
         if kg_a in kgs and kg_b in kgs:
-            out.append(e)
+            out.append(for_query(e))
     return out
 
 

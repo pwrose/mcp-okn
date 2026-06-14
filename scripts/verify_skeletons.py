@@ -582,6 +582,34 @@ SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {{
   GRAPH {g('ubergraph')} {{ ?taxon {SUBCLASS} ?u . }}
 }}"""
 
+# gene-expression-atlas-okn carries obo/NCBITaxon_ directly as the object of
+# biolink:in_taxon (8 model organisms); join straight to ubergraph.
+Q["D6-ncbitaxon-gxa-ubergraph"] = f"""
+SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {{
+  GRAPH {g('gene-expression-atlas-okn')} {{ ?s <https://w3id.org/biolink/vocab/in_taxon> ?taxon . FILTER(STRSTARTS(STR(?taxon),'http://purl.obolibrary.org/obo/NCBITaxon_')) }}
+  GRAPH {g('ubergraph')} {{ ?taxon {SUBCLASS} ?u . }}
+}}"""
+
+# biobricks-aopwiki references each AOP's taxonomic applicability as obo/NCBITaxon_
+# on dc:identifier (the bounded, semantically-correct predicate); 164 join ubergraph.
+Q["D7-ncbitaxon-aopwiki-ubergraph"] = f"""
+SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {{
+  GRAPH {g('biobricks-aopwiki')} {{ ?s <http://purl.org/dc/elements/1.1/identifier> ?taxon . FILTER(STRSTARTS(STR(?taxon),'http://purl.obolibrary.org/obo/NCBITaxon_')) }}
+  GRAPH {g('ubergraph')} {{ ?taxon {SUBCLASS} ?u . }}
+}}"""
+
+# nde stores species as https://www.uniprot.org/taxonomy/{id} (the id is the NCBI
+# taxon id) on schema:species; extract the id and rebuild obo/NCBITaxon_{id}. 1,797
+# of 1,808 join ubergraph. Collapse to DISTINCT taxa first.
+Q["D8-ncbitaxon-nde-ubergraph"] = f"""
+SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {{
+  {{ SELECT DISTINCT ?taxon WHERE {{
+    GRAPH {g('nde')} {{ ?s <http://schema.org/species> ?o . FILTER(CONTAINS(STR(?o),'/taxonomy/')) }}
+    BIND(IRI(CONCAT('http://purl.obolibrary.org/obo/NCBITaxon_',REPLACE(STR(?o),'^.*/taxonomy/([0-9]+).*$','$1'))) AS ?taxon)
+  }} }}
+  GRAPH {g('ubergraph')} {{ ?taxon {SUBCLASS} ?u . }}
+}}"""
+
 
 RESULTS = ROOT / "scripts" / ".skeleton_results.json"
 

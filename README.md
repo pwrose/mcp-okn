@@ -228,6 +228,16 @@ node IRI, a UniProt taxonomy IRI, or a string literal — so each crosswalk ship
 exact normalization. Ask `get_join_strategy("<kg>", "ubergraph")` for the runnable
 skeleton.
 
+Each KG's representation was audited to be the *complete* structured taxon set it
+carries: sawgraph's count is its full `subClassOf` hierarchy (538 = 538), nde and
+spoke-okn carry no `obo/NCBITaxon_` form at all (only UniProt / PATRIC ids), and
+aopwiki's only structured key is `dc:identifier` (stray NCBI Taxonomy URLs in its
+free-text HTML are not a join key). spoke-genelab is the **one** KG with two
+representations — model-organism ids on `Gene.taxonomy` *and* microbiome taxids in
+the `Organism` node IRI — both captured. Prefer id extraction over name resolution:
+the node-IRI route is robust to ontology renames (e.g. Actinobacteria →
+Actinomycetota) that an `rdfs:label` match silently drops.
+
 Two KGs can also be joined **through** the hub by composing their spokes — and when
 the two sides sit at different granularities (genus vs strain) that is the *only*
 way, since they share no id until a clade is expanded. The table stores each

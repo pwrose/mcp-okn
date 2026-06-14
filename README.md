@@ -178,6 +178,38 @@ The `BIND` rebuild is the crux: a naive `OMIM:…` ↔ `omim.org/entry/…` join
 silently returns nothing. Every verified crosswalk ships such a runnable
 skeleton — see `get_join_strategy` / `list_crosswalks` above.
 
+### The NCBITaxon taxonomy hub
+
+`ubergraph` doubles as a shared **taxonomy hub**: six biological KGs identify
+organisms by NCBI Taxonomy, so each joins ubergraph's precomputed taxonomy. That
+lets you expand a clade *once* in ubergraph and pull the matching organisms — or
+their genes, AOPs, datasets, strains — from any of them.
+
+| KG | how it keys taxa | shared taxa |
+|----|------------------|-------------|
+| `spoke-okn` | PATRIC genome IRI `…/organism/{taxid}.{n}` (extract id) | 33,602 |
+| `nde` | `schema:species` → `uniprot.org/taxonomy/{id}` (extract id) | 1,797 |
+| `sawgraph` | `obo/NCBITaxon_` as `subClassOf` subject | 538 |
+| `biobricks-aopwiki` | `obo/NCBITaxon_` on `dc:identifier` | 164 |
+| `spoke-genelab` | `obo/NCBITaxon_` string literal on `Gene.taxonomy` (coerce to IRI) | 9 |
+| `gene-expression-atlas-okn` | `obo/NCBITaxon_` on `biolink:in_taxon` | 8 |
+
+The id form differs per KG — a direct IRI, an integer embedded in a genome id, a
+UniProt taxonomy IRI, or a string literal — so each crosswalk ships the exact
+normalization. Ask `get_join_strategy("<kg>", "ubergraph")` for the runnable
+skeleton. Example — AOPs applicable to any rodent, clade expanded in ubergraph:
+
+```sparql
+SELECT DISTINCT ?aop ?taxon WHERE {
+  GRAPH <https://purl.org/okn/frink/kg/ubergraph> {              # expand the clade
+    ?taxon rdfs:subClassOf* <http://purl.obolibrary.org/obo/NCBITaxon_9989> .  # Rodentia
+  }
+  GRAPH <https://purl.org/okn/frink/kg/biobricks-aopwiki> {      # AOP taxonomic applicability
+    ?aop <http://purl.org/dc/elements/1.1/identifier> ?taxon .
+  }
+}
+```
+
 ## Reproducible transcripts
 
 Every `sparql_query` / `expand_ontology_term` call that returns rows is logged

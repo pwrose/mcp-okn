@@ -42,6 +42,10 @@ DBXREF = "<http://www.geneontology.org/formats/oboInOwl#hasDbXref>"
 BL_OBJ = "<https://w3id.org/biolink/vocab/object>"
 BL_SUBJ = "<https://w3id.org/biolink/vocab/subject>"
 SUBCLASS = "<http://www.w3.org/2000/01/rdf-schema#subClassOf>"
+# prokn's curated disease entity. Its biolink EFO_0000651 'DiseaseOrPhenotype'
+# association nodes ALSO carry MONDO/OMIM/MedGen on seeAlso; scoping the oard<->prokn
+# disease joins to up:Disease keeps them disease-entity-to-disease-entity.
+UP_DISEASE = "<http://purl.uniprot.org/core/Disease>"
 
 Q: dict[str, str] = {}
 
@@ -204,7 +208,7 @@ SELECT (COUNT(DISTINCT ?hp) AS ?n) WHERE {{
 Q["A3-mondo"] = f"""
 SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {{
   GRAPH {g('oard-kg')} {{ {{ ?s {BL_OBJ} ?mondo }} UNION {{ ?ss {BL_SUBJ} ?mondo }} FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }}
-  GRAPH {g('prokn')} {{ ?x {SEEALSO} ?mondo . }}
+  GRAPH {g('prokn')} {{ ?x a {UP_DISEASE} ; {SEEALSO} ?mondo . }}
 }}"""
 
 Q["A4-mondo"] = f"""
@@ -271,7 +275,7 @@ SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {{
   GRAPH {g('oard-kg')} {{ {{ ?x {BL_OBJ} ?mondo }} UNION {{ ?xs {BL_SUBJ} ?mondo }} FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }}
   GRAPH {g('ubergraph')} {{ ?mondo {DBXREF} ?curie . FILTER(STRSTARTS(STR(?curie),'OMIM:')) }}
   BIND(IRI(CONCAT('https://www.omim.org/entry/',REPLACE(STR(?curie),'^OMIM:',''))) AS ?omim)
-  GRAPH {g('prokn')} {{ ?y {SEEALSO} ?omim . }}
+  GRAPH {g('prokn')} {{ ?y a {UP_DISEASE} ; {SEEALSO} ?omim . }}
 }}"""
 
 # --- CHEBI<->CAS bridge ----------------------------------------------------

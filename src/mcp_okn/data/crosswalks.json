@@ -635,11 +635,11 @@
       "key_namespace": "http://purl.obolibrary.org/obo/MONDO_",
       "bridge_kg": null,
       "iri_normalization": null,
-      "verified_count": 954,
+      "verified_count": 445,
       "example_question": "Diseases with both EHR phenotype associations (OARD) and marker-gene/protein evidence (ProKN).",
-      "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { { ?s <https://w3id.org/biolink/vocab/object> ?mondo } UNION { ?ss <https://w3id.org/biolink/vocab/subject> ?mondo } FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/prokn> { ?x <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?mondo . }\n}",
+      "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { { ?s <https://w3id.org/biolink/vocab/object> ?mondo } UNION { ?ss <https://w3id.org/biolink/vocab/subject> ?mondo } FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/prokn> { ?x a <http://purl.uniprot.org/core/Disease> ; <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?mondo . }\n}",
       "skeleton_verified": true,
-      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. Joining on one position only undercounts (was 713, now 954).",
+      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. The prokn side is scoped to curated up:Disease (http://purl.uniprot.org/core/Disease) nodes: prokn also carries this seeAlso on its biolink EFO_0000651 'DiseaseOrPhenotype' association nodes (a looser phenotype construct), which would inflate the count; restricting to up:Disease keeps the join disease-entity-to-disease-entity. up:Disease-scoped count = 445 (any-subject, including phenotype-association nodes, is 954).",
       "complementary_note": "Complementary to the OMIM→ubergraph bridge for this SAME pair (the 'MONDO<->OMIM (bridged)' linkage). This direct MONDO join reaches a prokn disease only if its node carries a matching MONDO cross-reference; a prokn disease annotated only with OMIM is silently dropped here and recovered by the bridge. UNION both linkages for complete oard-kg<->prokn disease coverage — the bridge often reaches MORE diseases than the direct join, so do not pick just one."
     },
     {
@@ -1022,15 +1022,15 @@
       "key_namespace": "http://purl.obolibrary.org/obo/MONDO_ (oard-kg) ; https://www.omim.org/entry/{id} (prokn) — bridged on OMIM:{id} via ubergraph oboInOwl:hasDbXref",
       "bridge_kg": "ubergraph",
       "iri_normalization": "oard-kg keys diseases on MONDO (obo/MONDO_, biolink:object); prokn carries OMIM ids on rdfs:seeAlso as https://www.omim.org/entry/{id} (https + www). Bridge through ubergraph: the MONDO term carries an oboInOwl:hasDbXref CURIE literal 'OMIM:{id}' (10,038 distinct MONDO->OMIM xrefs). Strip the 'OMIM:' prefix and rebuild prokn's https://www.omim.org/entry/{id} IRI, then match it on prokn rdfs:seeAlso. prokn also carries non-numeric OMIM phenotype-series entries (.../entry/MTHU…) which have no MONDO xref and harmlessly do not match.",
-      "verified_count": 500,
+      "verified_count": 444,
       "verified_count_secondary": {
-        "distinct_omim_ids": 348
+        "distinct_omim_ids": 444
       },
-      "verified_count_note": "DISTINCT oard-kg MONDO diseases that reach a prokn OMIM rdfs:seeAlso via the ubergraph MONDO->OMIM hasDbXref bridge (348 distinct OMIM ids). The OMIM mirror of the DOID<->MONDO bridges A10/A11.",
+      "verified_count_note": "DISTINCT oard-kg MONDO diseases that reach a prokn curated up:Disease via the ubergraph MONDO->OMIM hasDbXref bridge to an OMIM rdfs:seeAlso (444 distinct OMIM ids). The OMIM mirror of the DOID<->MONDO bridges A10/A11.",
       "example_question": "Cross-reference OARD drug/outcome disease associations (oard-kg, MONDO) with ProKN's OMIM-annotated disease evidence by bridging MONDO to OMIM through ubergraph's cross-references.",
-      "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { { ?x <https://w3id.org/biolink/vocab/object> ?mondo } UNION { ?xs <https://w3id.org/biolink/vocab/subject> ?mondo } FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?mondo <http://www.geneontology.org/formats/oboInOwl#hasDbXref> ?curie . FILTER(STRSTARTS(STR(?curie),'OMIM:')) }\n  BIND(IRI(CONCAT('https://www.omim.org/entry/',REPLACE(STR(?curie),'^OMIM:',''))) AS ?omim)\n  GRAPH <https://purl.org/okn/frink/kg/prokn> { ?y <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?omim . }\n}",
+      "skeleton_query": "SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/oard-kg> { { ?x <https://w3id.org/biolink/vocab/object> ?mondo } UNION { ?xs <https://w3id.org/biolink/vocab/subject> ?mondo } FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }\n  GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?mondo <http://www.geneontology.org/formats/oboInOwl#hasDbXref> ?curie . FILTER(STRSTARTS(STR(?curie),'OMIM:')) }\n  BIND(IRI(CONCAT('https://www.omim.org/entry/',REPLACE(STR(?curie),'^OMIM:',''))) AS ?omim)\n  GRAPH <https://purl.org/okn/frink/kg/prokn> { ?y a <http://purl.uniprot.org/core/Disease> ; <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?omim . }\n}",
       "skeleton_verified": true,
-      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. Joining on one position only undercounts (was 347, now 500).",
+      "methodology_note": "oard-kg disease/phenotype IRIs appear as the object of BOTH biolink:subject and biolink:object (a reified association can carry the entity on either side); the skeleton UNIONs both positions so the join is entity-complete. The prokn side is scoped to curated up:Disease (http://purl.uniprot.org/core/Disease) nodes: prokn also carries this seeAlso on its biolink EFO_0000651 'DiseaseOrPhenotype' association nodes (a looser phenotype construct), which would inflate the count; restricting to up:Disease keeps the join disease-entity-to-disease-entity. up:Disease-scoped count = 444 (any-subject, including phenotype-association nodes, is 500).",
       "complementary_note": "Complementary to the direct MONDO seeAlso join for this SAME pair (the 'MONDO' linkage). This bridge recovers prokn diseases annotated only with OMIM (no usable MONDO cross-reference of their own), which the direct join misses. UNION both linkages for complete oard-kg<->prokn disease coverage; do not pick just one."
     },
     {
@@ -1416,6 +1416,27 @@
       "attempted_key": "leading-zero-truncated admin-region FIPS (3- and 4-digit suffixes)",
       "result": "261 unmatched",
       "diagnosis": "Of fiokg's 3,301 distinct administrativeRegion.USA owl:sameAs objects, 256 have a 3-digit suffix and 5 have a 4-digit suffix (e.g. .../administrativeRegion.USA.123, .../administrativeRegion.USA.6061) - county FIPS that lost one or two leading zeros, presumably via numeric handling upstream. These do NOT match spatialkg's zero-padded administrativeRegion.USA.{FIPS5} nodes verbatim and are excluded from the N2 count (3,031). They are NOT a different geography - they are damaged encodings of counties already partly covered by the clean 5-digit set. A zero-pad-and-rebuild recovery is conceivable but UNVERIFIED (ambiguous: a 3-digit '123' could pad to several states) and was not pursued; the clean 5-digit county key (N2/N3) is the reliable route."
+    },
+    {
+      "left_kg": "oard-kg",
+      "right_kg": "prokn",
+      "attempted_key": "MedGen / UMLS CUI (MONDO -> ubergraph UMLS:C -> prokn medgen seeAlso)",
+      "result": 0,
+      "diagnosis": "prokn carries MedGen IRIs (ncbi.nlm.nih.gov/medgen/C{cui}, 7,293) on rdfs:seeAlso ONLY from its biolink EFO_0000651 'DiseaseOrPhenotype' association nodes; its curated up:Disease (http://purl.uniprot.org/core/Disease) entries carry MONDO and OMIM seeAlso but ZERO MedGen. So a MONDO->UMLS:C bridge matches phenotype-association nodes (739), not disease entities (0 on up:Disease). Use the direct-MONDO (A3) and OMIM-bridge (A12) up:Disease joins; do not add a MedGen bridge."
+    },
+    {
+      "left_kg": "oard-kg",
+      "right_kg": "prokn",
+      "attempted_key": "Orphanet (MONDO -> ubergraph Orphanet xref -> prokn Orphanet)",
+      "result": 4,
+      "diagnosis": "prokn has only 4 Orphanet IRIs, so MONDO->Orphanet does NOT join. Orphanet is a rare-disease MEMBERSHIP FILTER, not a join key: oard-kg MONDO diseases carrying an Orphanet xref in ubergraph reach prokn's curated up:Disease via the MONDO (392) and OMIM (384) joins, none through prokn Orphanet nodes. To scope to rare diseases, filter A3/A12 on Orphanet membership; do not add an Orphanet bridge."
+    },
+    {
+      "left_kg": "oard-kg",
+      "right_kg": "prokn",
+      "attempted_key": "DOID (as an extra disease bridge beyond MONDO/OMIM)",
+      "result": "redundant",
+      "diagnosis": "prokn carries 321 DOID seeAlso ids on up:Disease nodes, but DOID<->MONDO is ~1:1 via ubergraph skos:exactMatch, so DOID-reachable oard-kg diseases are already covered by the direct MONDO join (A3). Adds no net-new oard-kg<->prokn disease entities over MONDO ∪ OMIM (A3 ∪ A12). Do not add a separate DOID bridge."
     }
   ],
   "superseded_non_joins": [

@@ -414,9 +414,10 @@ def test_taxon_source_spokegenelab_unions_both_representations():
     frag = _taxon_source("spoke-genelab", "a")
     assert "UNION" in frag
     assert "schema/taxonomy" in frag  # Gene.taxonomy model-organism ids
-    assert "schema/Organism" in frag  # microbiome label resolution
-    # microbiome side resolves the label through ubergraph
-    assert "kg/ubergraph" in frag
+    assert "schema/Organism" in frag  # microbiome node-IRI taxids
+    # microbiome side extracts the taxid from the node IRI (id-based, no ubergraph)
+    assert "/node/([0-9]+)" in frag
+    assert "kg/ubergraph" not in frag
 
 
 def test_taxon_source_unknown_kg_returns_none():

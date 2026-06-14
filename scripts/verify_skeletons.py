@@ -610,17 +610,17 @@ SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {{
   GRAPH {g('ubergraph')} {{ ?taxon {SUBCLASS} ?u . }}
 }}"""
 
-# spoke-genelab's microbiome Organism class is LABEL-ONLY (46 genus/family NAMES,
-# no taxon id; distinct from the 9 obo-id model organisms on Gene.taxonomy used by
-# D4). Resolve each name to a NCBITaxon term via ubergraph rdfs:label, expand its
-# clade with subClassOf*, and match spoke-okn's strain taxa: 33,313 distinct
-# spoke-okn taxa fall under spoke-genelab's microbiome clades. A label-resolution +
-# clade-expansion join that ONLY works through ubergraph — no shared id otherwise.
+# spoke-genelab's microbiome Organism nodes encode the NCBI taxon id directly in
+# the node IRI (.../node/{ncbi_taxon_id}, e.g. node/286 = Pseudomonas, node/2 =
+# Bacteria) — NOT label-only. Extract the id (parallel to spoke-okn's D5) and expand
+# its clade with subClassOf* to match spoke-okn's strain taxa: 33,313 distinct
+# spoke-okn taxa fall under spoke-genelab's microbiome clades. IRI-based, so robust
+# to ubergraph label renames (Actinobacteria->Actinomycetota) the old label route lost.
 Q["D9-ncbitaxon-spokegenelab-spokeokn-via-ubergraph"] = f"""
 SELECT (COUNT(DISTINCT ?desc) AS ?n) WHERE {{
   {{ SELECT DISTINCT ?genus WHERE {{
-    GRAPH {g('spoke-genelab')} {{ ?o a <https://purl.org/okn/frink/kg/spoke-genelab/schema/Organism> ; {LABEL} ?lab . }}
-    GRAPH {g('ubergraph')} {{ ?genus {LABEL} ?lab . FILTER(STRSTARTS(STR(?genus),'http://purl.obolibrary.org/obo/NCBITaxon_')) }}
+    GRAPH {g('spoke-genelab')} {{ ?node a <https://purl.org/okn/frink/kg/spoke-genelab/schema/Organism> . }}
+    BIND(IRI(CONCAT('http://purl.obolibrary.org/obo/NCBITaxon_',REPLACE(STR(?node),'^.*/node/([0-9]+).*$','$1'))) AS ?genus)
   }} }}
   GRAPH {g('ubergraph')} {{ ?desc {SUBCLASS}* ?genus . }}
   {{ SELECT DISTINCT ?desc WHERE {{
@@ -629,15 +629,16 @@ SELECT (COUNT(DISTINCT ?desc) AS ?n) WHERE {{
   }} }}
 }}"""
 
-# Companion hub spoke to D4: spoke-genelab's microbiome Organism class is label-only
-# (genus/family NAMES, no id), so it joins ubergraph by rdfs:label, not id. 41 of 46
-# names resolve to a NCBITaxon term (5 are compound/informal/renamed, e.g.
-# 'Actinobacteria' -> ubergraph 'Actinomycetota'). This surfaces spoke-genelab's
-# bacterial taxa in the hub; D9 expands these clades down to spoke-okn strains.
+# Companion hub spoke to D4: spoke-genelab's microbiome Organism nodes carry the
+# NCBITaxon id in their node IRI (.../node/{taxid}), so they join ubergraph by id —
+# NOT by name. Extract the id and confirm it in ubergraph's taxonomy: ALL 46 resolve
+# (the IRI route recovers the 5 the old label join dropped to ubergraph renames /
+# synonyms, e.g. Actinobacteria->Actinomycetota, Eoetvoesia->Eoetvoesiella).
 Q["D10-ncbitaxon-spokegenelab-microbiome-ubergraph"] = f"""
 SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {{
-  GRAPH {g('spoke-genelab')} {{ ?o a <https://purl.org/okn/frink/kg/spoke-genelab/schema/Organism> ; {LABEL} ?lab . }}
-  GRAPH {g('ubergraph')} {{ ?taxon {LABEL} ?lab . FILTER(STRSTARTS(STR(?taxon),'http://purl.obolibrary.org/obo/NCBITaxon_')) }}
+  GRAPH {g('spoke-genelab')} {{ ?node a <https://purl.org/okn/frink/kg/spoke-genelab/schema/Organism> . }}
+  BIND(IRI(CONCAT('http://purl.obolibrary.org/obo/NCBITaxon_',REPLACE(STR(?node),'^.*/node/([0-9]+).*$','$1'))) AS ?taxon)
+  GRAPH {g('ubergraph')} {{ ?taxon {SUBCLASS} ?u . }}
 }}"""
 
 

@@ -937,17 +937,17 @@ def _taxon_source(kg: str, var: str) -> str | None:
             f"REPLACE(STR({h}2),'^.*/taxonomy/([0-9]+).*$','$1'))) AS {v})"
         )
     if kg == "spoke-genelab":
-        ub = f"<{named_graph('ubergraph')}>"
         sch = "https://purl.org/okn/frink/kg/spoke-genelab/schema/"
+        # model organisms: obo NCBITaxon string literal on Gene.taxonomy (D4)
         model = (
             f"{{ GRAPH {g} {{ {h}1 <{sch}taxonomy> {h}2 . "
             f"FILTER(STRSTARTS(STR({h}2),'{_NCBITAXON}')) }} BIND(IRI(STR({h}2)) AS {v}) }}"
         )
+        # microbiome: NCBI taxon id embedded in the Organism node IRI .../node/{id} (D10)
         micro = (
-            f"{{ GRAPH {g} {{ {h}3 a <{sch}Organism> ; "
-            f"<http://www.w3.org/2000/01/rdf-schema#label> {h}4 . }} "
-            f"GRAPH {ub} {{ {v} <http://www.w3.org/2000/01/rdf-schema#label> {h}4 . "
-            f"FILTER(STRSTARTS(STR({v}),'{_NCBITAXON}')) }} }}"
+            f"{{ GRAPH {g} {{ {h}3 a <{sch}Organism> . }} "
+            f"BIND(IRI(CONCAT('{_NCBITAXON}',"
+            f"REPLACE(STR({h}3),'^.*/node/([0-9]+).*$','$1'))) AS {v}) }}"
         )
         return f"{{ {model} UNION {micro} }}"
     return None

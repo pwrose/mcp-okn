@@ -203,7 +203,7 @@ graph LR
   SAW -->|"538 · obo NCBITaxon IRI"| UB
   AOP -->|"164 · obo on dc:identifier"| UB
   GEN -->|"9 · Gene.taxonomy id"| UB
-  GEN -->|"41 · microbiome name"| UB
+  GEN -->|"46 · microbiome node id"| UB
   GXA -->|"8 · in_taxon"| UB
 
   GEN -. "33,313 shared via hub (D9)" .-> SOK
@@ -211,7 +211,7 @@ graph LR
 
 Solid edges are hub spokes (each KG ↔ ubergraph); the dashed edge is a cross-KG
 join *composed through* the hub (D9). spoke-genelab has two spokes — model
-organisms by id (9) and microbiome by resolved name (41).
+organisms by id (9) and microbiome by node-IRI taxid (46).
 
 | KG (spoke) | how it keys taxa | shared taxa |
 |----|------------------|-------------|
@@ -219,17 +219,18 @@ organisms by id (9) and microbiome by resolved name (41).
 | `nde` | `schema:species` → `uniprot.org/taxonomy/{id}` (extract id) | 1,797 |
 | `sawgraph` | `obo/NCBITaxon_` as `subClassOf` subject | 538 |
 | `biobricks-aopwiki` | `obo/NCBITaxon_` on `dc:identifier` | 164 |
-| `spoke-genelab` (microbiome) | genus/family **name** on `Organism` `rdfs:label` (resolve via ubergraph label) | 41 |
+| `spoke-genelab` (microbiome) | NCBITaxon id in `Organism` node IRI `…/node/{taxid}` | 46 |
 | `spoke-genelab` (model organisms) | `obo/NCBITaxon_` string literal on `Gene.taxonomy` (coerce to IRI) | 9 |
 | `gene-expression-atlas-okn` | `obo/NCBITaxon_` on `biolink:in_taxon` | 8 |
 
-The key form differs per KG — a direct IRI, an integer embedded in a genome id, a
-UniProt taxonomy IRI, a string literal, or a bare **name** resolved through
-ubergraph's labels — so each crosswalk ships the exact normalization. Ask
-`get_join_strategy("<kg>", "ubergraph")` for the runnable skeleton.
+The key form differs per KG — a direct IRI, an integer embedded in a genome id or
+node IRI, a UniProt taxonomy IRI, or a string literal — so each crosswalk ships the
+exact normalization. Ask `get_join_strategy("<kg>", "ubergraph")` for the runnable
+skeleton.
 
-Two KGs can also be joined **through** the hub by composing their spokes — and for
-label-only or coarser-grained taxa that is the *only* way. The table stores each
+Two KGs can also be joined **through** the hub by composing their spokes — and when
+the two sides sit at different granularities (genus vs strain) that is the *only*
+way, since they share no id until a clade is expanded. The table stores each
 KG↔ubergraph spoke, not pairwise counts, so **`taxon_overlap(kg_a, kg_b)`** composes
 two spokes on demand and returns two runnable skeletons: `exact_id` (same NCBITaxon
 id on both sides) and `clade_membership` (one KG's taxa nested under the other's via

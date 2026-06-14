@@ -187,19 +187,28 @@ organisms by NCBI Taxonomy, so each joins ubergraph's precomputed taxonomy. That
 lets you expand a clade *once* in ubergraph and pull the matching organisms — or
 their genes, AOPs, datasets, strains — from any of them.
 
-| KG | how it keys taxa | shared taxa |
+| KG (spoke) | how it keys taxa | shared taxa |
 |----|------------------|-------------|
 | `spoke-okn` | PATRIC genome IRI `…/organism/{taxid}.{n}` (extract id) | 33,602 |
 | `nde` | `schema:species` → `uniprot.org/taxonomy/{id}` (extract id) | 1,797 |
 | `sawgraph` | `obo/NCBITaxon_` as `subClassOf` subject | 538 |
 | `biobricks-aopwiki` | `obo/NCBITaxon_` on `dc:identifier` | 164 |
-| `spoke-genelab` | `obo/NCBITaxon_` string literal on `Gene.taxonomy` (coerce to IRI) | 9 |
+| `spoke-genelab` (microbiome) | genus/family **name** on `Organism` `rdfs:label` (resolve via ubergraph label) | 41 |
+| `spoke-genelab` (model organisms) | `obo/NCBITaxon_` string literal on `Gene.taxonomy` (coerce to IRI) | 9 |
 | `gene-expression-atlas-okn` | `obo/NCBITaxon_` on `biolink:in_taxon` | 8 |
 
-The id form differs per KG — a direct IRI, an integer embedded in a genome id, a
-UniProt taxonomy IRI, or a string literal — so each crosswalk ships the exact
-normalization. Ask `get_join_strategy("<kg>", "ubergraph")` for the runnable
-skeleton. Example — AOPs applicable to any rodent, clade expanded in ubergraph:
+The key form differs per KG — a direct IRI, an integer embedded in a genome id, a
+UniProt taxonomy IRI, a string literal, or a bare **name** resolved through
+ubergraph's labels — so each crosswalk ships the exact normalization. Ask
+`get_join_strategy("<kg>", "ubergraph")` for the runnable skeleton.
+
+Two KGs can also be joined **through** the hub by composing their spokes — and for
+label-only or coarser-grained taxa that is the *only* way. For example,
+spoke-genelab's microbiome genera expand down through ubergraph to spoke-okn's
+strain-level taxa: **33,313 shared taxa** (`get_join_strategy("spoke-genelab",
+"spoke-okn")`) — a join impossible without the hub.
+
+Example — AOPs applicable to any rodent, clade expanded in ubergraph:
 
 ```sparql
 SELECT DISTINCT ?aop ?taxon WHERE {

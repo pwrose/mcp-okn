@@ -154,12 +154,13 @@ Some graphs share no identifier directly but meet through a **bridge** graph.
 For example, **OARD-KG** keys diseases on MONDO while **ProKN** annotates them
 with OMIM; they join through `ubergraph`'s MONDO→OMIM cross-references. Ask
 `get_join_strategy("oard-kg", "prokn")` for the verified skeleton — it returns
-this runnable query (347 MONDO diseases / 348 OMIM ids, verified):
+this runnable query (444 diseases on ProKN's curated `up:Disease`, verified):
 
 ```sparql
 SELECT DISTINCT ?mondo ?omim WHERE {
-  GRAPH <https://purl.org/okn/frink/kg/oard-kg> {            # MONDO diseases
-    ?assoc <https://w3id.org/biolink/vocab/object> ?mondo .
+  GRAPH <https://purl.org/okn/frink/kg/oard-kg> {            # MONDO diseases (either assoc side)
+    { ?a <https://w3id.org/biolink/vocab/object> ?mondo }
+    UNION { ?a <https://w3id.org/biolink/vocab/subject> ?mondo }
     FILTER(STRSTARTS(STR(?mondo), "http://purl.obolibrary.org/obo/MONDO_"))
   }
   GRAPH <https://purl.org/okn/frink/kg/ubergraph> {          # bridge: MONDO → OMIM
@@ -168,8 +169,9 @@ SELECT DISTINCT ?mondo ?omim WHERE {
   }
   # ubergraph stores OMIM:{id} CURIEs; ProKN stores https://www.omim.org/entry/{id} IRIs
   BIND(IRI(CONCAT("https://www.omim.org/entry/", REPLACE(STR(?curie), "^OMIM:", ""))) AS ?omim)
-  GRAPH <https://purl.org/okn/frink/kg/prokn> {              # OMIM on rdfs:seeAlso
-    ?d <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?omim .
+  GRAPH <https://purl.org/okn/frink/kg/prokn> {              # OMIM on rdfs:seeAlso, curated up:Disease only
+    ?d a <http://purl.uniprot.org/core/Disease> ;
+       <http://www.w3.org/2000/01/rdf-schema#seeAlso> ?omim .
   }
 }
 ```

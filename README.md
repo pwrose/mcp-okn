@@ -187,6 +187,31 @@ organisms by NCBI Taxonomy, so each joins ubergraph's precomputed taxonomy. That
 lets you expand a clade *once* in ubergraph and pull the matching organisms — or
 their genes, AOPs, datasets, strains — from any of them.
 
+```mermaid
+graph LR
+  UB(("ubergraph<br/>NCBITaxon hub"))
+  SOK["spoke-okn"]
+  NDE["nde"]
+  SAW["sawgraph"]
+  AOP["biobricks-aopwiki"]
+  GEN["spoke-genelab"]
+  GXA["gene-expression-atlas-okn"]
+
+  SOK -->|"33,602 · PATRIC genome id"| UB
+  NDE -->|"1,797 · UniProt taxonomy IRI"| UB
+  SAW -->|"538 · obo NCBITaxon IRI"| UB
+  AOP -->|"164 · obo on dc:identifier"| UB
+  GEN -->|"9 · Gene.taxonomy id"| UB
+  GEN -->|"41 · microbiome name"| UB
+  GXA -->|"8 · in_taxon"| UB
+
+  GEN -. "33,313 shared via hub (D9)" .-> SOK
+```
+
+Solid edges are hub spokes (each KG ↔ ubergraph); the dashed edge is a cross-KG
+join *composed through* the hub (D9). spoke-genelab has two spokes — model
+organisms by id (9) and microbiome by resolved name (41).
+
 | KG (spoke) | how it keys taxa | shared taxa |
 |----|------------------|-------------|
 | `spoke-okn` | PATRIC genome IRI `…/organism/{taxid}.{n}` (extract id) | 33,602 |

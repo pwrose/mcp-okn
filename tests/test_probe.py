@@ -373,3 +373,51 @@ async def test_find_crosswalks_degrades_when_node_scans_fail(monkeypatch):
     assert "INCOMPLETE" in out["note"]
     assert "sample=50000" in out["note"]
     assert "sample=50000" in out["note"]
+
+
+# --- taxon_overlap -----------------------------------------------------------
+from mcp_okn.server import taxon_overlap, _taxon_source, TAXON_HUB_KGS  # noqa: E402
+
+
+async def test_taxon_overlap_composes_both_skeletons():
+    out = await taxon_overlap("nde", "sawgraph")
+    assert out["kg_a"] == "nde" and out["kg_b"] == "sawgraph"
+    ex, cl = out["exact_id_skeleton"], out["clade_membership_skeleton"]
+    # exact-id: each side wrapped in its own DISTINCT subquery on a shared var,
+    # joined by COUNT(DISTINCT ?t) — no cross-product, no BIND-on-bound-var.
+    assert ex.count("SELECT DISTINCT ?t") == 2
+    assert "COUNT(DISTINCT ?t)" in ex
+    # both KGs' normalizations are present, plus ubergraph clade closure only on clade.
+    assert "https://purl.org/okn/frink/kg/nde" in ex
+    assert "https://purl.org/okn/frink/kg/sawgraph" in ex
+    assert "subClassOf>*" not in ex
+    assert "subClassOf>*" in cl and "kg/ubergraph" in cl
+    # clade is directional: kg_b under kg_a, counted on ?b.
+    assert "COUNT(DISTINCT ?b)" in cl
+
+
+async def test_taxon_overlap_surfaces_materialized_pair():
+    out = await taxon_overlap("spoke-genelab", "spoke-okn")
+    ids = [m["id"] for m in out.get("materialized", [])]
+    assert "D9-ncbitaxon-spokegenelab-spokeokn-via-ubergraph" in ids
+    assert "verified crosswalk already exists" in out["note"]
+
+
+async def test_taxon_overlap_rejects_non_hub_kg():
+    out = await taxon_overlap("prokn", "nde")
+    assert out["status"] == "not_in_taxon_hub"
+    assert out["missing"] == ["prokn"]
+    assert set(out["taxon_hub_kgs"]) == set(TAXON_HUB_KGS)
+
+
+def test_taxon_source_spokegenelab_unions_both_representations():
+    frag = _taxon_source("spoke-genelab", "a")
+    assert "UNION" in frag
+    assert "schema/taxonomy" in frag  # Gene.taxonomy model-organism ids
+    assert "schema/Organism" in frag  # microbiome label resolution
+    # microbiome side resolves the label through ubergraph
+    assert "kg/ubergraph" in frag
+
+
+def test_taxon_source_unknown_kg_returns_none():
+    assert _taxon_source("oard-kg", "a") is None

@@ -781,7 +781,7 @@
       "shared_key": "NCBITaxon",
       "key_namespace": "http://purl.obolibrary.org/obo/NCBITaxon_",
       "bridge_kg": null,
-      "iri_normalization": "Shared key NCBITaxon (obo/NCBITaxon_). spoke-genelab stores each gene's organism as a STRING literal holding the NCBITaxon IRI on the Gene.taxonomy node property (schema/taxonomy), NOT as a node — coerce it to an IRI with BIND(IRI(STR(?ts)) AS ?taxon) before joining ubergraph's taxonomy. All 9 distinct model-organism taxa (human 9606, mouse 10090, Arabidopsis 3702, C. elegans 6239, zebrafish 7955, Drosophila 7227, rat 10116, yeast 4932, Monodelphis domestica 13613) exist in ubergraph (9/9). For CATEGORY questions expand a clade inline via ?taxon rdfs:subClassOf* <parent NCBITaxon term> on ubergraph, then join to spoke-genelab. NOTE: this entry covers ONLY spoke-genelab's 9 model-organism taxa (Gene.taxonomy). spoke-genelab has a SECOND taxon representation — its microbiome Organism class (46 label-only genus/family NAMES e.g. 'Pseudomonas', no NCBITaxon id) — which does NOT join by id but IS reachable by resolving the name via ubergraph rdfs:label and expanding the clade; see D9 (spoke-genelab<->spoke-okn via ubergraph, 33,313 shared taxa).",
+      "iri_normalization": "Shared key NCBITaxon (obo/NCBITaxon_). spoke-genelab stores each gene's organism as a STRING literal holding the NCBITaxon IRI on the Gene.taxonomy node property (schema/taxonomy), NOT as a node — coerce it to an IRI with BIND(IRI(STR(?ts)) AS ?taxon) before joining ubergraph's taxonomy. All 9 distinct model-organism taxa (human 9606, mouse 10090, Arabidopsis 3702, C. elegans 6239, zebrafish 7955, Drosophila 7227, rat 10116, yeast 4932, Monodelphis domestica 13613) exist in ubergraph (9/9). For CATEGORY questions expand a clade inline via ?taxon rdfs:subClassOf* <parent NCBITaxon term> on ubergraph, then join to spoke-genelab. NOTE: this entry covers ONLY spoke-genelab's 9 model-organism taxa (Gene.taxonomy). spoke-genelab has a SECOND taxon representation — its microbiome Organism class (46 label-only genus/family NAMES e.g. 'Pseudomonas', no NCBITaxon id) — which does NOT join by id but IS reachable by resolving the name via ubergraph rdfs:label and expanding the clade; recorded as its OWN hub spoke D10 (spoke-genelab microbiome <-> ubergraph by rdfs:label, 41 of 46 names resolve), and expanded to spoke-okn strains in D9 (33,313 shared taxa). So spoke-genelab's full taxon footprint in the hub is 9 model-organism ids (this entry) + 41 microbiome names (D10).",
       "verified_count": 9,
       "verified_count_note": "DISTINCT spoke-genelab Gene.taxonomy NCBITaxon terms present in ubergraph (9/9 = 100%). These are the model-organism taxa of the differential-expression genes; the join lets ubergraph's taxonomy lineage/clade closure be applied to spoke-genelab genes.",
       "example_question": "Expand a clade in ubergraph (e.g. all rodents) and pull spoke-genelab spaceflight differential-expression genes whose organism falls within it.",
@@ -888,6 +888,28 @@
       "skeleton_query": "SELECT (COUNT(DISTINCT ?desc) AS ?n) WHERE {\n  { SELECT DISTINCT ?genus WHERE {\n    GRAPH <https://purl.org/okn/frink/kg/spoke-genelab> { ?o a <https://purl.org/okn/frink/kg/spoke-genelab/schema/Organism> ; <http://www.w3.org/2000/01/rdf-schema#label> ?lab . }\n    GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?genus <http://www.w3.org/2000/01/rdf-schema#label> ?lab . FILTER(STRSTARTS(STR(?genus),'http://purl.obolibrary.org/obo/NCBITaxon_')) }\n  } }\n  GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?desc <http://www.w3.org/2000/01/rdf-schema#subClassOf>* ?genus . }\n  { SELECT DISTINCT ?desc WHERE {\n    GRAPH <https://purl.org/okn/frink/kg/spoke-okn> { ?ot a <https://w3id.org/biolink/vocab/OrganismTaxon> }\n    BIND(IRI(CONCAT('http://purl.obolibrary.org/obo/NCBITaxon_',REPLACE(STR(?ot),'^.*/organism/([0-9]+).*$','$1'))) AS ?desc)\n  } }\n}",
       "skeleton_verified": true,
       "methodology_note": "spoke-genelab carries taxa in TWO forms: 9 model organisms as obo NCBITaxon IRIs on Gene.taxonomy (D4), and 46 microbiome genus/family NAMES (label-only) on the Organism class (this entry). The latter overlap spoke-okn massively but only via ubergraph name-resolution + clade expansion — an exact-id matrix reports 0 and is wrong for label-only/coarse-grained taxa."
+    },
+    {
+      "id": "D10-ncbitaxon-spokegenelab-microbiome-ubergraph",
+      "left_kg": "spoke-genelab",
+      "left_predicate": "rdfs:label (microbiome Organism class — genus/family NAME, label-only)",
+      "left_role": "subject",
+      "right_kg": "ubergraph",
+      "right_predicate": "rdfs:label (NCBITaxon term), then subClassOf* for category expansion",
+      "right_role": "subject",
+      "bridge_kg": null,
+      "shared_key": "NCBITaxon",
+      "key_namespace": "http://purl.obolibrary.org/obo/NCBITaxon_",
+      "iri_normalization": "Companion to D4. spoke-genelab's microbiome organisms (the Organism class, 46 nodes) are LABEL-ONLY — a genus/family NAME on rdfs:label (e.g. 'Pseudomonas'), no taxon id — so unlike D4's Gene.taxonomy model organisms they CANNOT join ubergraph by id. Resolve each name to a NCBITaxon term by matching ubergraph rdfs:label: 41 of 46 resolve. The 5 that do not are compound/informal/renamed names (Burkholderia-Caballeronia-Paraburkholderia, 'Pleosporales sp', 'Pyrenochaetopsis sp', Eoetvoesia, and Actinobacteria — ubergraph uses the renamed 'Actinomycetota'). Once resolved, expand a clade via ?desc rdfs:subClassOf* ?taxon for category queries (this is what D9 does to reach spoke-okn strains). Label matching is exact; prefer the obo-id path (D4) when an id is available.",
+      "verified_count": 41,
+      "verified_count_secondary": {
+        "microbiome_labels": 46
+      },
+      "verified_count_note": "DISTINCT ubergraph NCBITaxon terms that spoke-genelab's 46 microbiome Organism labels resolve to (41/46). These are genus/family-level bacteria from spaceflight differential-abundance analysis; the obo-id model organisms are covered separately by D4 (9). Together D4+D10 are spoke-genelab's full taxon footprint in the hub.",
+      "example_question": "Map spoke-genelab's spaceflight microbiome genera to NCBI Taxonomy, then expand each clade in ubergraph.",
+      "skeleton_query": "SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/spoke-genelab> { ?o a <https://purl.org/okn/frink/kg/spoke-genelab/schema/Organism> ; <http://www.w3.org/2000/01/rdf-schema#label> ?lab . }\n  GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?taxon <http://www.w3.org/2000/01/rdf-schema#label> ?lab . FILTER(STRSTARTS(STR(?taxon),'http://purl.obolibrary.org/obo/NCBITaxon_')) }\n}",
+      "skeleton_verified": true,
+      "methodology_note": "Label (name) resolution, not id matching: spoke-genelab's microbiome taxa carry only rdfs:label. This is the companion spoke to D4 (obo ids) and the spoke-genelab side of D9 (the spoke-okn bridge). A label join is inherently looser than an id join — exact-string only, and homonyms across ontologies are possible — so it is scoped to NCBITaxon terms."
     },
     {
       "id": "L4-county-fips-scales-spatialkg",

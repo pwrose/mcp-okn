@@ -629,6 +629,17 @@ SELECT (COUNT(DISTINCT ?desc) AS ?n) WHERE {{
   }} }}
 }}"""
 
+# Companion hub spoke to D4: spoke-genelab's microbiome Organism class is label-only
+# (genus/family NAMES, no id), so it joins ubergraph by rdfs:label, not id. 41 of 46
+# names resolve to a NCBITaxon term (5 are compound/informal/renamed, e.g.
+# 'Actinobacteria' -> ubergraph 'Actinomycetota'). This surfaces spoke-genelab's
+# bacterial taxa in the hub; D9 expands these clades down to spoke-okn strains.
+Q["D10-ncbitaxon-spokegenelab-microbiome-ubergraph"] = f"""
+SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {{
+  GRAPH {g('spoke-genelab')} {{ ?o a <https://purl.org/okn/frink/kg/spoke-genelab/schema/Organism> ; {LABEL} ?lab . }}
+  GRAPH {g('ubergraph')} {{ ?taxon {LABEL} ?lab . FILTER(STRSTARTS(STR(?taxon),'http://purl.obolibrary.org/obo/NCBITaxon_')) }}
+}}"""
+
 
 RESULTS = ROOT / "scripts" / ".skeleton_results.json"
 

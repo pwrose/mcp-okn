@@ -771,6 +771,24 @@
       "verified_count_note": "DISTINCT sawgraph NCBITaxon terms present in ubergraph (538/538 = 100%). (Corrects a prior 77, which was a single arbitrary clade's worth of taxa, not the shared-key join.)"
     },
     {
+      "id": "D4-ncbitaxon-spokegenelab-ubergraph",
+      "left_kg": "spoke-genelab",
+      "left_predicate": "https://purl.org/okn/frink/kg/spoke-genelab/schema/taxonomy (Gene node property)",
+      "left_role": "object",
+      "right_kg": "ubergraph",
+      "right_predicate": "rdfs:subClassOf* (category expansion)",
+      "right_role": "subject",
+      "shared_key": "NCBITaxon",
+      "key_namespace": "http://purl.obolibrary.org/obo/NCBITaxon_",
+      "bridge_kg": null,
+      "iri_normalization": "Shared key NCBITaxon (obo/NCBITaxon_). spoke-genelab stores each gene's organism as a STRING literal holding the NCBITaxon IRI on the Gene.taxonomy node property (schema/taxonomy), NOT as a node — coerce it to an IRI with BIND(IRI(STR(?ts)) AS ?taxon) before joining ubergraph's taxonomy. All 9 distinct model-organism taxa (human 9606, mouse 10090, Arabidopsis 3702, C. elegans 6239, zebrafish 7955, Drosophila 7227, rat 10116, yeast 4932, Monodelphis domestica 13613) exist in ubergraph (9/9). For CATEGORY questions expand a clade inline via ?taxon rdfs:subClassOf* <parent NCBITaxon term> on ubergraph, then join to spoke-genelab. NOTE: spoke-genelab's microbial Organism class (spoke-genelab/node/N IRIs, label-only e.g. 'Cupriavidus') carries no NCBITaxon id and cannot join by id.",
+      "verified_count": 9,
+      "verified_count_note": "DISTINCT spoke-genelab Gene.taxonomy NCBITaxon terms present in ubergraph (9/9 = 100%). These are the model-organism taxa of the differential-expression genes; the join lets ubergraph's taxonomy lineage/clade closure be applied to spoke-genelab genes.",
+      "example_question": "Expand a clade in ubergraph (e.g. all rodents) and pull spoke-genelab spaceflight differential-expression genes whose organism falls within it.",
+      "skeleton_query": "SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {\n  GRAPH <https://purl.org/okn/frink/kg/spoke-genelab> { ?gene <https://purl.org/okn/frink/kg/spoke-genelab/schema/taxonomy> ?ts . FILTER(STRSTARTS(STR(?ts),'http://purl.obolibrary.org/obo/NCBITaxon_')) }\n  BIND(IRI(STR(?ts)) AS ?taxon)\n  GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?taxon <http://www.w3.org/2000/01/rdf-schema#subClassOf> ?u . }\n}",
+      "skeleton_verified": true
+    },
+    {
       "id": "L4-county-fips-scales-spatialkg",
       "left_kg": "scales",
       "left_predicate": "http://schemas.scales-okn.org/rdf/scales#hasIdbCounty",

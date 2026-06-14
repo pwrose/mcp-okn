@@ -556,6 +556,18 @@ SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {{
   GRAPH {g('ubergraph')} {{ ?taxon {SUBCLASS} ?u . }}
 }}"""
 
+# spoke-genelab stores each gene's organism as a STRING literal NCBITaxon IRI on
+# the Gene.taxonomy node property (not as a node); coerce STR->IRI before joining
+# ubergraph's taxonomy. All 9 model-organism taxa overlap (9/9). The microbial
+# Organism class (node/N IRIs) is label-only — no NCBITaxon id — so it cannot join.
+_SGL = "https://purl.org/okn/frink/kg/spoke-genelab/schema/"
+Q["D4-ncbitaxon-spokegenelab-ubergraph"] = f"""
+SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {{
+  GRAPH {g('spoke-genelab')} {{ ?gene <{_SGL}taxonomy> ?ts . FILTER(STRSTARTS(STR(?ts),'http://purl.obolibrary.org/obo/NCBITaxon_')) }}
+  BIND(IRI(STR(?ts)) AS ?taxon)
+  GRAPH {g('ubergraph')} {{ ?taxon {SUBCLASS} ?u . }}
+}}"""
+
 
 RESULTS = ROOT / "scripts" / ".skeleton_results.json"
 

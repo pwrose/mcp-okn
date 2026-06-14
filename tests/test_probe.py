@@ -421,3 +421,24 @@ def test_taxon_source_spokegenelab_unions_both_representations():
 
 def test_taxon_source_unknown_kg_returns_none():
     assert _taxon_source("oard-kg", "a") is None
+
+
+def test_taxon_hub_kgs_match_crosswalk_table():
+    """Guard against drift: every KG with a NCBITaxon crosswalk to ubergraph must
+    be in TAXON_HUB_KGS with a working _taxon_source, and vice versa. If someone
+    adds a taxonomy crosswalk without wiring the tool (or removes one), this fails.
+    """
+    from mcp_okn import crosswalks
+
+    table_kgs = set()
+    for row in crosswalks.all_crosswalks(include_examples=False):
+        if row["domain"] == "Taxonomy":
+            table_kgs.update(k for k in row["kgs"] if k != "ubergraph")
+
+    hub = set(srv.TAXON_HUB_KGS)
+    assert hub == table_kgs, (
+        f"TAXON_HUB_KGS out of sync with the crosswalk table: "
+        f"only-in-hub={hub - table_kgs}, only-in-table={table_kgs - hub}"
+    )
+    # and every declared hub KG actually yields a source fragment
+    assert all(_taxon_source(kg, "a") is not None for kg in srv.TAXON_HUB_KGS)

@@ -568,6 +568,20 @@ SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {{
   GRAPH {g('ubergraph')} {{ ?taxon {SUBCLASS} ?u . }}
 }}"""
 
+# spoke-okn's OrganismTaxon nodes (bacterial strains + other organisms) are PATRIC/
+# BV-BRC genome IRIs of the form .../organism/{ncbi_taxon_id}.{assembly}. Extract the
+# integer taxon-id prefix ([0-9]+ stops at the dot, no escaping needed) and rebuild
+# obo/NCBITaxon_{id}, then join ubergraph's taxonomy. 33,602 of 34,570 distinct taxa
+# overlap. Collapse to DISTINCT taxa first (321k genome nodes -> 34.5k taxa) to bound it.
+Q["D5-ncbitaxon-spokeokn-ubergraph"] = f"""
+SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {{
+  {{ SELECT DISTINCT ?taxon WHERE {{
+    GRAPH {g('spoke-okn')} {{ ?o a <https://w3id.org/biolink/vocab/OrganismTaxon> . }}
+    BIND(IRI(CONCAT('http://purl.obolibrary.org/obo/NCBITaxon_',REPLACE(STR(?o),'^.*/organism/([0-9]+).*$','$1'))) AS ?taxon)
+  }} }}
+  GRAPH {g('ubergraph')} {{ ?taxon {SUBCLASS} ?u . }}
+}}"""
+
 
 RESULTS = ROOT / "scripts" / ".skeleton_results.json"
 

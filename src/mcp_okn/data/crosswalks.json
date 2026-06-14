@@ -789,6 +789,27 @@
       "skeleton_verified": true
     },
     {
+      "id": "D5-ncbitaxon-spokeokn-ubergraph",
+      "left_kg": "spoke-okn",
+      "left_predicate": "node IRI .../organism/{ncbi_taxon_id}.{assembly} (biolink:OrganismTaxon)",
+      "left_role": "subject",
+      "right_kg": "ubergraph",
+      "right_predicate": "rdfs:subClassOf* (category expansion)",
+      "right_role": "subject",
+      "shared_key": "NCBITaxon",
+      "key_namespace": "http://purl.obolibrary.org/obo/NCBITaxon_",
+      "bridge_kg": null,
+      "iri_normalization": "Shared key NCBITaxon (obo/NCBITaxon_). spoke-okn does NOT carry obo/NCBITaxon_ IRIs directly: its biolink:OrganismTaxon nodes (321,442 bacterial strains + other organisms) are PATRIC/BV-BRC genome IRIs of the form .../spoke-okn/organism/{ncbi_taxon_id}.{assembly} (e.g. organism/100053.4). Extract the integer taxon-id prefix with REPLACE(STR(?o),'^.*/organism/([0-9]+).*$','$1') ([0-9]+ stops at the dot, no escaping) and rebuild obo/NCBITaxon_{id}, then join ubergraph. Collapse to DISTINCT taxa first (321k genome assemblies map to 34,570 distinct taxa) before probing ubergraph. For CATEGORY questions expand a clade inline via ?taxon rdfs:subClassOf* <parent NCBITaxon term> on ubergraph, then join to spoke-okn.",
+      "verified_count": 33602,
+      "verified_count_secondary": {
+        "distinct_spokeokn_taxa": 34570
+      },
+      "verified_count_note": "DISTINCT spoke-okn organism taxa (extracted from PATRIC genome IRIs) present in ubergraph's taxonomy: 33,602 of 34,570 (97.2%). The ~968 misses are mostly strain-level PATRIC taxon ids absent from ubergraph's NCBITaxon snapshot. Mostly bacterial pathogens; complements D3 (sawgraph) and D4 (spoke-genelab) on the same ubergraph taxonomy hub.",
+      "example_question": "Expand a bacterial clade in ubergraph (e.g. all Enterobacteriaceae) and pull spoke-okn organism strains, their AMR phenotypes, and drug responses within it.",
+      "skeleton_query": "SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {\n  { SELECT DISTINCT ?taxon WHERE {\n    GRAPH <https://purl.org/okn/frink/kg/spoke-okn> { ?o a <https://w3id.org/biolink/vocab/OrganismTaxon> . }\n    BIND(IRI(CONCAT('http://purl.obolibrary.org/obo/NCBITaxon_',REPLACE(STR(?o),'^.*/organism/([0-9]+).*$','$1'))) AS ?taxon)\n  } }\n  GRAPH <https://purl.org/okn/frink/kg/ubergraph> { ?taxon <http://www.w3.org/2000/01/rdf-schema#subClassOf> ?u . }\n}",
+      "skeleton_verified": true
+    },
+    {
       "id": "L4-county-fips-scales-spatialkg",
       "left_kg": "scales",
       "left_predicate": "http://schemas.scales-okn.org/rdf/scales#hasIdbCounty",

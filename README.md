@@ -229,10 +229,14 @@ ubergraph's labels — so each crosswalk ships the exact normalization. Ask
 `get_join_strategy("<kg>", "ubergraph")` for the runnable skeleton.
 
 Two KGs can also be joined **through** the hub by composing their spokes — and for
-label-only or coarser-grained taxa that is the *only* way. For example,
-spoke-genelab's microbiome genera expand down through ubergraph to spoke-okn's
-strain-level taxa: **33,313 shared taxa** (`get_join_strategy("spoke-genelab",
-"spoke-okn")`) — a join impossible without the hub.
+label-only or coarser-grained taxa that is the *only* way. The table stores each
+KG↔ubergraph spoke, not pairwise counts, so **`taxon_overlap(kg_a, kg_b)`** composes
+two spokes on demand and returns two runnable skeletons: `exact_id` (same NCBITaxon
+id on both sides) and `clade_membership` (one KG's taxa nested under the other's via
+`subClassOf*`). The two can differ enormously — for `spoke-genelab` × `spoke-okn`,
+exact-id is **2** but clade-membership is **33,313** (spoke-genelab's microbiome
+genera expanding down to spoke-okn's strains, also stored as crosswalk D9) — a join
+impossible without the hub.
 
 Example — AOPs applicable to any rodent, clade expanded in ubergraph:
 

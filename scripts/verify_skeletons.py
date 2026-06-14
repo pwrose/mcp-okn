@@ -610,6 +610,25 @@ SELECT (COUNT(DISTINCT ?taxon) AS ?n) WHERE {{
   GRAPH {g('ubergraph')} {{ ?taxon {SUBCLASS} ?u . }}
 }}"""
 
+# spoke-genelab's microbiome Organism class is LABEL-ONLY (46 genus/family NAMES,
+# no taxon id; distinct from the 9 obo-id model organisms on Gene.taxonomy used by
+# D4). Resolve each name to a NCBITaxon term via ubergraph rdfs:label, expand its
+# clade with subClassOf*, and match spoke-okn's strain taxa: 33,313 distinct
+# spoke-okn taxa fall under spoke-genelab's microbiome clades. A label-resolution +
+# clade-expansion join that ONLY works through ubergraph — no shared id otherwise.
+Q["D9-ncbitaxon-spokegenelab-spokeokn-via-ubergraph"] = f"""
+SELECT (COUNT(DISTINCT ?desc) AS ?n) WHERE {{
+  {{ SELECT DISTINCT ?genus WHERE {{
+    GRAPH {g('spoke-genelab')} {{ ?o a <https://purl.org/okn/frink/kg/spoke-genelab/schema/Organism> ; {LABEL} ?lab . }}
+    GRAPH {g('ubergraph')} {{ ?genus {LABEL} ?lab . FILTER(STRSTARTS(STR(?genus),'http://purl.obolibrary.org/obo/NCBITaxon_')) }}
+  }} }}
+  GRAPH {g('ubergraph')} {{ ?desc {SUBCLASS}* ?genus . }}
+  {{ SELECT DISTINCT ?desc WHERE {{
+    GRAPH {g('spoke-okn')} {{ ?ot a <https://w3id.org/biolink/vocab/OrganismTaxon> }}
+    BIND(IRI(CONCAT('http://purl.obolibrary.org/obo/NCBITaxon_',REPLACE(STR(?ot),'^.*/organism/([0-9]+).*$','$1'))) AS ?desc)
+  }} }}
+}}"""
+
 
 RESULTS = ROOT / "scripts" / ".skeleton_results.json"
 

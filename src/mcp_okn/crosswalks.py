@@ -153,6 +153,22 @@ def domain_for(shared_key: str | None) -> str:
     return _DOMAIN_BY_SHARED_KEY.get(shared_key or "", "Other")
 
 
+def _is_taxon_hub_spoke(entry: dict[str, Any]) -> bool:
+    """True for a KG↔ubergraph NCBITaxon *spoke* — collapsed into a single hub row
+    by :func:`all_crosswalks` so the listing speaks in integration terms, not in
+    each KG's (uninteresting) overlap with the ubergraph hub.
+
+    A pairwise taxon crosswalk that merely *bridges through* ubergraph (ubergraph
+    is the ``bridge_kg``, e.g. spoke-genelab↔spoke-okn / D9) is NOT a spoke: it is a
+    real KG-to-KG integration point and keeps its own row.
+    """
+    return (
+        entry.get("shared_key") == "NCBITaxon"
+        and not entry.get("bridge_kg")
+        and "ubergraph" in (entry.get("left_kg"), entry.get("right_kg"))
+    )
+
+
 def all_crosswalks(include_examples: bool = True) -> list[dict[str, Any]]:
     """Compact summary of every verified cross-KG integration point.
 
@@ -160,6 +176,17 @@ def all_crosswalks(include_examples: bool = True) -> list[dict[str, Any]]:
     the KGs it connects in join order (left → bridge → right, by official registry
     shortname), the shared identifier, the bridge KG if any, and the verified row
     count. ``example_question`` is included unless ``include_examples`` is False.
+
+    The NCBITaxon crosswalks are a HUB (each KG joins ``ubergraph``), but a user
+    cares about pairwise integration, not each KG's overlap with the ubergraph
+    plumbing. So the per-KG ``KG↔ubergraph`` spokes are collapsed into ONE hub row
+    (``hub: "ubergraph"``) that names the mutually-integratable member KGs and
+    points to ``taxon_overlap(kg_a, kg_b)`` for a pair's counts (which are
+    two-valued — exact id vs clade — so no single pairwise number is shown). The
+    underlying spoke recipes are untouched and still served by
+    ``get_join_strategy`` / ``verified_for``; only this listing collapses them.
+    Verified pairwise taxon crosswalks that bridge through ubergraph (e.g. D9) keep
+    their own rows.
 
     Rows are sorted by ``(domain, shared_key, kgs)`` so the result reads as a
     table grouped by domain and ordered by ontology within each — ready to render
@@ -171,7 +198,15 @@ def all_crosswalks(include_examples: bool = True) -> list[dict[str, Any]]:
     (official shortnames) and ``shared_key``.
     """
     rows: list[dict[str, Any]] = []
+    hub_members: set[str] = set()
     for e in load_crosswalks().get("verified_crosswalks", []):
+        if _is_taxon_hub_spoke(e):
+            hub_members.update(
+                kg
+                for kg in (e.get("left_kg"), e.get("right_kg"))
+                if kg and kg != "ubergraph"
+            )
+            continue
         row = {
             "domain": domain_for(e.get("shared_key")),
             "kgs": _ordered_kgs(e),
@@ -182,6 +217,31 @@ def all_crosswalks(include_examples: bool = True) -> list[dict[str, Any]]:
         if include_examples:
             row["example_question"] = e.get("example_question")
         rows.append(row)
+
+    if hub_members:
+        cluster: dict[str, Any] = {
+            "domain": domain_for("NCBITaxon"),
+            "kgs": sorted(hub_members),
+            "shared_key": "NCBITaxon",
+            "bridge_kg": None,
+            "verified_count": None,
+            "hub": "ubergraph",
+            "note": (
+                "NCBITaxon hub: these KGs each map organisms to the ubergraph "
+                "taxonomy and are pairwise-integratable through it. Pairwise "
+                "overlap is two-valued (exact id vs clade membership) — call "
+                "taxon_overlap(kg_a, kg_b) for a pair's counts. Verified pairwise "
+                "taxon crosswalks (e.g. spoke-genelab<->spoke-okn) keep their own "
+                "rows."
+            ),
+        }
+        if include_examples:
+            cluster["example_question"] = (
+                "Which KGs share organisms, and how many? Use "
+                "taxon_overlap(kg_a, kg_b) for any pair."
+            )
+        rows.append(cluster)
+
     rows.sort(key=lambda r: (r["domain"], r["shared_key"] or "", r["kgs"]))
     return rows
 

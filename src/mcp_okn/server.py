@@ -1080,6 +1080,14 @@ async def list_crosswalks(include_examples: bool = True) -> dict[str, Any]:
         KG the join touches in join order (left → bridge → right), each an
         official registry shortname usable directly with
         `describe_kg`/`get_schema`/`query`. `verified_on` dates the counts.
+
+        The NCBITaxon crosswalks are a hub (each KG joins `ubergraph`); rather than
+        list each KG's overlap with that plumbing, the per-KG spokes are collapsed
+        into ONE row carrying `hub: "ubergraph"`, the mutually-integratable member
+        KGs in `kgs`, `verified_count: null`, and a `note` pointing to
+        `taxon_overlap(kg_a, kg_b)` for a pair's (two-valued: exact vs clade)
+        counts. Verified pairwise taxon crosswalks (e.g. spoke-genelab<->spoke-okn,
+        bridged through ubergraph) keep their own rows.
     """
     rows = crosswalk_table.all_crosswalks(include_examples=include_examples)
     return {

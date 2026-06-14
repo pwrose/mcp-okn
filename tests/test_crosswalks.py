@@ -80,12 +80,33 @@ async def test_single_kg_listing_returns_all_its_joins():
 
 
 @pytest.mark.asyncio
-async def test_list_crosswalks_returns_every_verified_entry():
+async def test_list_crosswalks_collapses_taxon_hub_into_one_row():
+    entries = cw.load_crosswalks()["verified_crosswalks"]
+    spokes = [e for e in entries if cw._is_taxon_hub_spoke(e)]
+    assert len(spokes) >= 2, "expected several KG<->ubergraph taxon spokes to collapse"
+
     out = await list_crosswalks()
-    expected = len(cw.load_crosswalks()["verified_crosswalks"])
-    assert out["count"] == expected
-    assert len(out["crosswalks"]) == expected
-    assert all(row["kgs"] for row in out["crosswalks"])  # every join names KGs
+    rows = out["crosswalks"]
+    assert out["count"] == len(rows)
+    assert all(row["kgs"] for row in rows)  # every row names KGs
+
+    # the spokes collapse into exactly one hub row; all other entries stay as rows
+    hub_rows = [r for r in rows if r.get("hub")]
+    assert len(hub_rows) == 1
+    assert len(rows) == (len(entries) - len(spokes)) + 1
+
+    hub = hub_rows[0]
+    assert hub["hub"] == "ubergraph"
+    assert hub["shared_key"] == "NCBITaxon" and hub["domain"] == "Taxonomy"
+    assert hub["bridge_kg"] is None and hub["verified_count"] is None
+    # names every spoke's non-ubergraph member, and never the hub plumbing itself
+    members = {kg for e in spokes for kg in (e["left_kg"], e["right_kg"]) if kg != "ubergraph"}
+    assert set(hub["kgs"]) == members and "ubergraph" not in hub["kgs"]
+    assert "taxon_overlap" in hub["note"]
+
+    # a pairwise taxon crosswalk that bridges through ubergraph (D9) is NOT collapsed
+    d9 = [r for r in rows if r["shared_key"] == "NCBITaxon" and r["bridge_kg"] == "ubergraph"]
+    assert d9 and all(set(r["kgs"]) >= {"spoke-genelab", "spoke-okn"} for r in d9)
 
 
 @pytest.mark.asyncio

@@ -278,6 +278,27 @@ SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {{
   GRAPH {g('prokn')} {{ ?y a {UP_DISEASE} ; {SEEALSO} ?omim . }}
 }}"""
 
+# oard-kg MONDO -> ubergraph hasDbXref 'Orphanet:{{id}}' -> prokn up:Disease Orphanet
+# seeAlso (http://www.orpha.net/ORDO/Orphanet_{{id}}, 2,192 such ids on up:Disease).
+# Sibling of A12: recovers prokn diseases keyed by Orphanet but no usable MONDO/OMIM.
+Q["A14-orphanet-oardkg-prokn-via-ubergraph"] = f"""
+SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {{
+  GRAPH {g('oard-kg')} {{ {{ ?x {BL_OBJ} ?mondo }} UNION {{ ?xs {BL_SUBJ} ?mondo }} FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }}
+  GRAPH {g('ubergraph')} {{ ?mondo {DBXREF} ?curie . FILTER(STRSTARTS(STR(?curie),'Orphanet:')) }}
+  BIND(IRI(CONCAT('http://www.orpha.net/ORDO/Orphanet_',REPLACE(STR(?curie),'^Orphanet:',''))) AS ?orpha)
+  GRAPH {g('prokn')} {{ ?y a {UP_DISEASE} ; {SEEALSO} ?orpha . }}
+}}"""
+
+# oard-kg MONDO -> ubergraph skos:exactMatch DOID -> prokn up:Disease DOID seeAlso.
+# Sibling of A12; reaches 111 disease entities (109 net-new) but those net-new
+# DOID-only diseases carry NO up:Protein associations (0 net-new disease-protein pairs).
+Q["A15-doid-oardkg-prokn-via-ubergraph"] = f"""
+SELECT (COUNT(DISTINCT ?mondo) AS ?n) WHERE {{
+  GRAPH {g('oard-kg')} {{ {{ ?x {BL_OBJ} ?mondo }} UNION {{ ?xs {BL_SUBJ} ?mondo }} FILTER(STRSTARTS(STR(?mondo),'http://purl.obolibrary.org/obo/MONDO_')) }}
+  GRAPH {g('ubergraph')} {{ ?mondo {EXACT} ?doid . FILTER(STRSTARTS(STR(?doid),'http://purl.obolibrary.org/obo/DOID_')) }}
+  GRAPH {g('prokn')} {{ ?y a {UP_DISEASE} ; {SEEALSO} ?doid . }}
+}}"""
+
 # --- CHEBI<->CAS bridge ----------------------------------------------------
 Q["B2-chebi-cas-bridge"] = f"""
 SELECT (COUNT(DISTINCT ?c2) AS ?n) WHERE {{

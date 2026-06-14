@@ -127,6 +127,8 @@ _DOMAIN_BY_SHARED_KEY: dict[str, str] = {
     "HP": "Disease & phenotype",
     "DOID<->MONDO": "Disease & phenotype",
     "MONDO<->OMIM (bridged)": "Disease & phenotype",
+    "MONDO<->Orphanet (bridged)": "Disease & phenotype",
+    "MONDO<->DOID (bridged)": "Disease & phenotype",
     "MeSH_descriptor_id": "Disease & phenotype",
     "Ensembl": "Genes",
     "Entrez": "Genes",
